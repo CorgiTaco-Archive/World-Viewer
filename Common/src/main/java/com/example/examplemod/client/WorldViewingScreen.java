@@ -87,13 +87,14 @@ public class WorldViewingScreen extends Screen {
         this.screenLengthX = onScreenWorldMaxX - onScreenWorldMinX;
         this.screenLengthZ = onScreenWorldMaxZ - onScreenWorldMinZ;
 
-        this.playerX = Math.abs(onScreenWorldMaxX - playerOrigin.getX());
-        this.playerZ = Math.abs(onScreenWorldMaxZ - playerOrigin.getZ());
 
         onScreenWorldMinTileX = blockToTile(onScreenWorldMinX);
         onScreenWorldMaxTileX = blockToTile(onScreenWorldMaxX);
         onScreenWorldMinTileZ = blockToTile(onScreenWorldMinZ);
         onScreenWorldMaxTileZ = blockToTile(onScreenWorldMaxZ);
+
+        this.playerX = playerOrigin.getX() - tileToBlock(onScreenWorldMinTileX);
+        this.playerZ = playerOrigin.getZ() - tileToBlock(onScreenWorldMinTileZ);
 
         screenTileWidth = blockToTile(width);
         screenTileHeight = blockToTile(height);
