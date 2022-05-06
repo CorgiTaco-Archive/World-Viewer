@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Matrix4f;
 import it.unimi.dsi.fastutil.Function;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -34,14 +33,14 @@ import java.util.concurrent.ExecutorService;
 public class WorldViewingScreen extends Screen {
     private static final ExecutorService EXECUTOR_SERVICE = UtilAccess.invokeMakeExecutor("world_viewer"); //TODO: Find a better way / time to create this
     MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
-    BlockPos cameraOrigin = Minecraft.getInstance().player.blockPosition();
+    BlockPos playerOrigin = Minecraft.getInstance().player.blockPosition();
 
     ServerLevel level = server.getLevel(Level.OVERWORLD);
 
     Object2IntOpenHashMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
 
 
-    Long2ObjectMap<CompletableFuture<Tile>> tiles = new Long2ObjectLinkedOpenHashMap<>();
+    Long2ObjectLinkedOpenHashMap<CompletableFuture<Tile>> tiles = new Long2ObjectLinkedOpenHashMap<>();
 
     public DataAtPosition[][] colorAtCoord = null;
 
@@ -52,10 +51,10 @@ public class WorldViewingScreen extends Screen {
         }
     }
 
-    private int minX;
-    private int maxX;
-    private int minZ;
-    private int maxZ;
+    private int screenMinX;
+    private int screenMaxX;
+    private int screenMinZ;
+    private int screenMaxZ;
     private int minTileX;
     private int maxTileX;
     private int minTileZ;
@@ -67,17 +66,23 @@ public class WorldViewingScreen extends Screen {
     @Override
     protected void init() {
         colorAtCoord = new DataAtPosition[this.width + 1][this.height + 1];
-        int middleWidth = this.width - (this.width / 2);
-        int middleHeight = this.height - (this.height / 2);
-        minX = cameraOrigin.getX() - middleWidth;
-        maxX = cameraOrigin.getX() + middleWidth;
-        minZ = cameraOrigin.getZ() - middleHeight;
-        maxZ = cameraOrigin.getZ() + middleHeight;
+        updateCenter(playerOrigin.getX(), playerOrigin.getZ());
 
-        minTileX = blockToTile(minX);
-        maxTileX = blockToTile(maxX);
-        minTileZ = blockToTile(minZ);
-        maxTileZ = blockToTile(maxZ);
+        super.init();
+    }
+
+    private void updateCenter(int xOrigin, int zOrigin) {
+        int middleWidth = (this.width - (this.width / 2));
+        int middleHeight = (this.height - (this.height / 2));
+        this.screenMinX = xOrigin - middleWidth;
+        this.screenMaxX = xOrigin + middleWidth;
+        this.screenMinZ = zOrigin - middleHeight;
+        this.screenMaxZ = zOrigin + middleHeight;
+
+        minTileX = blockToTile(screenMinX);
+        maxTileX = blockToTile(screenMaxX);
+        minTileZ = blockToTile(screenMinZ);
+        maxTileZ = blockToTile(screenMaxZ);
 
         tileWidth = blockToTile(width);
         tileHeight = blockToTile(height);
@@ -97,8 +102,6 @@ public class WorldViewingScreen extends Screen {
                 });
             }
         }
-
-        super.init();
     }
 
     @NotNull
@@ -157,15 +160,25 @@ public class WorldViewingScreen extends Screen {
         }
 
 
-        int middleWidth = this.width - (this.width / 2);
-        int middleHeight = this.height - (this.height / 2);
+        int renderedPlayerX = screenMaxX - this.playerOrigin.getX();
+        int renderPlayerZ = screenMaxZ - this.playerOrigin.getZ();
 
-        hLine(stack, middleWidth - 5, middleWidth + 5, middleHeight, FastColor.ARGB32.color(255, 0, 0, 0));
-        vLine(stack, middleWidth, middleHeight - 5, middleHeight + 5, FastColor.ARGB32.color(255, 0, 0, 0));
+        hLine(stack, renderedPlayerX - 5, renderedPlayerX + 5, renderPlayerZ, FastColor.ARGB32.color(255, 0, 0, 0));
+        vLine(stack, renderedPlayerX, renderPlayerZ - 5, renderPlayerZ + 5, FastColor.ARGB32.color(255, 0, 0, 0));
 
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseZ, int button) {
+        if (button == 0) {
+            while (this.tiles.size() > 100) {
+                this.tiles.removeFirst().cancel(true);
+            }
+            updateCenter((int) (this.screenMinX + mouseX), (int) (this.screenMinZ + mouseZ));
+        }
+        return super.mouseClicked(mouseX, mouseZ, button);
+    }
 
     public static void fill(PoseStack pPoseStack, float pMinX, float pMinY, float pMaxX, float pMaxY, int pColor, BufferBuilder bufferBuilder) {
         innerFill(pPoseStack.last().pose(), pMinX, pMinY, pMaxX, pMaxY, pColor, bufferBuilder);
