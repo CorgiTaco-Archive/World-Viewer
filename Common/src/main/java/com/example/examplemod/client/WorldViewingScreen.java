@@ -1,6 +1,5 @@
 package com.example.examplemod.client;
 
-import com.example.examplemod.mixin.UtilAccess;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Matrix4f;
@@ -11,7 +10,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.Registry;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextComponent;
@@ -22,14 +20,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.Biomes;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ForkJoinPool;
 
 public class WorldViewingScreen extends Screen {
-    private static final ExecutorService EXECUTOR_SERVICE = UtilAccess.invokeMakeExecutor("world_viewer"); //TODO: Find a better way / time to create this
+    private static final ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(); //TODO: Find a better way / time to create this
     MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
     private final BlockPos playerOrigin = Minecraft.getInstance().player.blockPosition();
 
@@ -45,11 +43,11 @@ public class WorldViewingScreen extends Screen {
     public WorldViewingScreen(Component $$0) {
         super($$0);
         for (Holder<Biome> possibleBiome : level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes()) {
-            colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, 255, 255, 255) /*FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256))*/);
+            colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
         }
-        Registry<Biome> biomeRegistry = level.registryAccess().ownedRegistry(Registry.BIOME_REGISTRY).orElseThrow();
-        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.FOREST), FastColor.ARGB32.color(255, 0, 255, 0));
-        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.SNOWY_BEACH), FastColor.ARGB32.color(255, 255, 0, 0));
+//        Registry<Biome> biomeRegistry = level.registryAccess().ownedRegistry(Registry.BIOME_REGISTRY).orElseThrow();
+//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.FOREST), FastColor.ARGB32.color(255, 0, 255, 0));
+//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.SNOWY_BEACH), FastColor.ARGB32.color(255, 255, 0, 0));
     }
 
     private int middleWidth;
@@ -80,10 +78,10 @@ public class WorldViewingScreen extends Screen {
     private void updateCenter(int xOrigin, int zOrigin) {
         middleWidth = this.width - (this.width / 2);
         middleHeight = this.height - (this.height / 2);
-        this.onScreenWorldMinX = xOrigin - middleWidth;
-        this.onScreenWorldMaxX = xOrigin + middleWidth;
-        this.onScreenWorldMinZ = zOrigin - middleHeight;
-        this.onScreenWorldMaxZ = zOrigin + middleHeight;
+        int onScreenWorldMinX = xOrigin - middleWidth;
+        int onScreenWorldMaxX = xOrigin + middleWidth;
+        int onScreenWorldMinZ = zOrigin - middleHeight;
+        int onScreenWorldMaxZ = zOrigin + middleHeight;
         this.screenLengthX = onScreenWorldMaxX - onScreenWorldMinX;
         this.screenLengthZ = onScreenWorldMaxZ - onScreenWorldMinZ;
 
@@ -92,6 +90,11 @@ public class WorldViewingScreen extends Screen {
         onScreenWorldMaxTileX = blockToTile(onScreenWorldMaxX);
         onScreenWorldMinTileZ = blockToTile(onScreenWorldMinZ);
         onScreenWorldMaxTileZ = blockToTile(onScreenWorldMaxZ);
+
+        this.onScreenWorldMinX = tileToBlock(onScreenWorldMinTileX);
+        this.onScreenWorldMaxX = tileToBlock(onScreenWorldMaxTileX);
+        this.onScreenWorldMinZ = tileToBlock(onScreenWorldMinTileZ);
+        this.onScreenWorldMaxZ = tileToBlock(onScreenWorldMaxTileZ);
 
         this.playerX = playerOrigin.getX() - tileToBlock(onScreenWorldMinTileX);
         this.playerZ = playerOrigin.getZ() - tileToBlock(onScreenWorldMinTileZ);
@@ -166,7 +169,29 @@ public class WorldViewingScreen extends Screen {
         int playerScreenX = this.playerX;
         int playerScreenZ = this.playerZ;
         fill(stack, playerScreenX - 5, playerScreenZ - 5, playerScreenX + 5, playerScreenZ + 5, playerColor);
+
+        renderPositionTooltip(stack, mouseX, mouseZ);
+
+
         super.render(stack, mouseX, mouseZ, partialTicks);
+    }
+
+    private void renderPositionTooltip(PoseStack stack, int mouseX, int mouseZ) {
+        int mouseXTile = blockToTile(mouseX);
+        int mouseZTile = blockToTile(mouseZ);
+        long worldTileKey = tileKey(onScreenWorldMinTileX + mouseXTile, onScreenWorldMinTileZ + mouseZTile);
+        if (tiles.containsKey(worldTileKey)) {
+            CompletableFuture<Tile> tileCompletableFuture = tiles.get(worldTileKey);
+            Tile tileFuture = tileCompletableFuture.getNow(null);
+            if (tileFuture != null) {
+                if (isInside(0, 0, width, height, mouseX, mouseZ)) {
+                    int positionDataX = mouseX - tileToBlock(mouseXTile);
+                    int positionDataZ = mouseZ - tileToBlock(mouseZTile);
+                    DataAtPosition dataAtMousePosition = tileFuture.dataAtPositions[positionDataX][positionDataZ];
+                    renderTooltip(stack, new TextComponent(String.format("x=%s, y=%s, z=%s", this.onScreenWorldMinX + mouseX, 63, this.onScreenWorldMinZ + mouseZ)).append(" | ").append(dataAtMousePosition.displayName), mouseX, mouseZ);
+                }
+            }
+        }
     }
 
     @Override

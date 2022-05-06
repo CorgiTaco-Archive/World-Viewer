@@ -15,7 +15,7 @@ import static com.example.examplemod.client.WorldViewingScreen.*;
 public class Tile {
     private final BoundingBox worldBoundingBox;
 
-    private final WorldViewingScreen.DataAtPosition[][] dataAtPositions;
+    public final WorldViewingScreen.DataAtPosition[][] dataAtPositions;
 
     public Tile(Object2IntOpenHashMap<Holder<Biome>> color, int worldTileX, int worldTileZ, Function<BlockPos, Holder<Biome>> biomeGetter) {
         BoundingBox boundingBox = new BoundingBox(
