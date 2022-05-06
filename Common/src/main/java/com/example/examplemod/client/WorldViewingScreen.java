@@ -1,7 +1,8 @@
 package com.example.examplemod.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.*;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Matrix4f;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -66,22 +67,23 @@ public class WorldViewingScreen extends Screen {
     private int screenTileHeight;
     private int playerX;
     private int playerZ;
+    private float scale = 1;
 
     @Override
     protected void init() {
         colorAtCoord = new DataAtPosition[this.width + 1][this.height + 1];
-        updateCenter(playerOrigin.getX(), playerOrigin.getZ());
+        updateCenter(playerOrigin.getX(), playerOrigin.getZ(), 1);
 
         super.init();
     }
 
-    private void updateCenter(int xOrigin, int zOrigin) {
+    private void updateCenter(int xOrigin, int zOrigin, double scale) {
         middleWidth = this.width - (this.width / 2);
         middleHeight = this.height - (this.height / 2);
-        int onScreenWorldMinX = xOrigin - middleWidth;
-        int onScreenWorldMaxX = xOrigin + middleWidth;
-        int onScreenWorldMinZ = zOrigin - middleHeight;
-        int onScreenWorldMaxZ = zOrigin + middleHeight;
+        int onScreenWorldMinX = (int) (xOrigin - middleWidth / scale);
+        int onScreenWorldMaxX = (int) (xOrigin + middleWidth / scale);
+        int onScreenWorldMinZ = (int) (zOrigin - middleHeight / scale);
+        int onScreenWorldMaxZ = (int) (zOrigin + middleHeight / scale);
         this.screenLengthX = onScreenWorldMaxX - onScreenWorldMinX;
         this.screenLengthZ = onScreenWorldMaxZ - onScreenWorldMinZ;
 
@@ -99,8 +101,8 @@ public class WorldViewingScreen extends Screen {
         this.playerX = playerOrigin.getX() - tileToBlock(onScreenWorldMinTileX);
         this.playerZ = playerOrigin.getZ() - tileToBlock(onScreenWorldMinTileZ);
 
-        screenTileWidth = blockToTile(width);
-        screenTileHeight = blockToTile(height);
+        screenTileWidth = blockToTile((int) (width / scale));
+        screenTileHeight = blockToTile((int) (height / scale));
 
         for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
             for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
@@ -135,12 +137,10 @@ public class WorldViewingScreen extends Screen {
 
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
-        BufferBuilder bufferbuilder = Tesselator.getInstance().getBuilder();
-        RenderSystem.enableBlend();
-        RenderSystem.disableTexture();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        bufferbuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+        stack.pushPose();
+        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        stack.scale(this.scale, this.scale, 1);
         for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
             for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
                 int worldTileX = onScreenWorldMinTileX + screenTileX;
@@ -152,23 +152,18 @@ public class WorldViewingScreen extends Screen {
                     if (tileFuture != null) {
                         int tileMinRenderX = tileToBlock(screenTileX);
                         int tileMinRenderZ = tileToBlock(screenTileZ);
-                        tileFuture.render(stack, bufferbuilder, tileMinRenderX, tileMinRenderZ);
+                        tileFuture.render(stack, tileMinRenderX, tileMinRenderZ);
                     } else {
-                        fill(stack, tileToBlock(screenTileX) - 1, tileToBlock(screenTileZ) - 1, tileToMaxBlock(screenTileX), tileToMaxBlock(screenTileZ), FastColor.ARGB32.color(255, 0, 0, 0), bufferbuilder);
+//                        fill(stack, tileToBlock(screenTileX) - 1, tileToBlock(screenTileZ) - 1, tileToMaxBlock(screenTileX), tileToMaxBlock(screenTileZ), FastColor.ARGB32.color(255, 0, 0, 0), bufferbuilder);
                     }
                 }
             }
         }
-        bufferbuilder.end();
-        BufferUploader.end(bufferbuilder);
-        RenderSystem.enableTexture();
-        RenderSystem.disableBlend();
-
-
         int playerColor = FastColor.ARGB32.color(255, 255, 0, 255);
         int playerScreenX = this.playerX;
         int playerScreenZ = this.playerZ;
         fill(stack, playerScreenX - 5, playerScreenZ - 5, playerScreenX + 5, playerScreenZ + 5, playerColor);
+        stack.popPose();
 
         renderPositionTooltip(stack, mouseX, mouseZ);
 
@@ -200,7 +195,9 @@ public class WorldViewingScreen extends Screen {
             while (this.tiles.size() > 100) {
                 this.tiles.removeFirst().cancel(true);
             }
-            updateCenter((int) (this.onScreenWorldMinX + mouseX), (int) (this.onScreenWorldMinZ + mouseZ));
+            updateCenter((int) (this.onScreenWorldMinX + mouseX), (int) (this.onScreenWorldMinZ + mouseZ), 1);
+        } else {
+            updateCenter(this.onScreenWorldMinX, this.onScreenWorldMinZ, scale *= 0.5);
         }
         return super.mouseClicked(mouseX, mouseZ, button);
     }
@@ -262,5 +259,13 @@ public class WorldViewingScreen extends Screen {
     }
 
     record DataAtPosition(int color, Component displayName) {
+    }
+
+    @Override
+    public void onClose() {
+        while (this.tiles.size() > 0) {
+            this.tiles.removeFirst().cancel(true);
+        }
+        super.onClose();
     }
 }
