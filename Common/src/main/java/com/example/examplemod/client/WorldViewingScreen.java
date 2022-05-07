@@ -307,11 +307,11 @@ public class WorldViewingScreen extends Screen {
     }
 
     public static int blockToTile(int blockCoord) {
-        return blockCoord >> 9;
+        return blockCoord >> 6;
     }
 
     public static int tileToBlock(int tileCoord) {
-        return tileCoord << 9;
+        return tileCoord << 6;
     }
 
     public static int tileToMaxBlock(int tileCoord) {
@@ -328,7 +328,7 @@ public class WorldViewingScreen extends Screen {
     }
 
     private void stopAndEmptyTiles() {
-        EXECUTOR_SERVICE.shutdown();
+        EXECUTOR_SERVICE.shutdownNow();
 //        while (this.tiles.size() > 0) {
 //            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
 //            Tile tile = tileCompletableFuture.getNow(null);
