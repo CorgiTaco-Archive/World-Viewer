@@ -1,7 +1,6 @@
 package com.example.examplemod.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Matrix4f;
 import com.mojang.math.Vector3f;
@@ -12,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -24,17 +24,20 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.Heightmap;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.FloatBuffer;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 
 public class WorldViewingScreen extends Screen {
-    private static ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(); //TODO: Find a better way / time to create this
+    private static ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(2); //TODO: Find a better way / time to create this
     MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
     private final BlockPos playerOrigin = Minecraft.getInstance().player.blockPosition();
+    private static final Tile BLANK_TILE = new Tile(1, 1, 0, 1, pos -> new DataAtPosition(FastColor.ARGB32.color(255, 0, 0, 0), new TextComponent("???")));
 
     ServerLevel level = server.getLevel(Level.OVERWORLD);
 
@@ -50,12 +53,6 @@ public class WorldViewingScreen extends Screen {
         for (Holder<Biome> possibleBiome : level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes()) {
             colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
         }
-//        Registry<Biome> biomeRegistry = level.registryAccess().ownedRegistry(Registry.BIOME_REGISTRY).orElseThrow();
-////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.FOREST), FastColor.ARGB32.color(255, 0, 255, 0));
-//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.ICE_SPIKES), FastColor.ARGB32.color(255, 0, 0, 255));
-////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.BEACH), FastColor.ARGB32.color(255, 255, 255, 255));
-////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.OCEAN), FastColor.ARGB32.color(255, 0, 0, 255));
-////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.PLAINS), FastColor.ARGB32.color(255, 255, 0, 255));
     }
 
     private int onScreenWorldMinX;
@@ -72,6 +69,11 @@ public class WorldViewingScreen extends Screen {
     private float scale = 1;
     private final Matrix4f matrix4f = new Matrix4f();
     private Matrix4f matrix4fInverse = new Matrix4f();
+    private boolean readHeightmap = false;
+    private int scrollCoolDown;
+    private boolean showYToolTip;
+    private Runnable updateCenter = () -> {
+    };
 
     @Override
     protected void init() {
@@ -122,7 +124,16 @@ public class WorldViewingScreen extends Screen {
 
                 tiles.computeIfAbsent(tileKey, key ->
                     CompletableFuture.supplyAsync(() ->
-                        new Tile(this.colorForBiome, finalX, y, finalZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
+                        new Tile(4, finalX, y, finalZ, blockPos -> {
+                            if (readHeightmap) {
+                                int baseHeight = level.getChunkSource().getGenerator().getBaseHeight(blockPos.getX(), blockPos.getZ(), Heightmap.Types.OCEAN_FLOOR_WG, level.getLevel());
+                                Holder<Biome> biomeHolder = level.getBiome(new BlockPos(blockPos.getX(), baseHeight, blockPos.getZ()));
+                                return new DataAtPosition(this.colorForBiome.getInt(biomeHolder), getKey(biomeHolder.unwrapKey().orElseThrow().location()));
+                            } else {
+                                Holder<Biome> biomeHolder = level.getBiome(blockPos);
+                                return new DataAtPosition(this.colorForBiome.getInt(biomeHolder), getKey(biomeHolder.unwrapKey().orElseThrow().location()));
+                            }
+                        }), EXECUTOR_SERVICE)
                 );
             }
         }
@@ -153,17 +164,28 @@ public class WorldViewingScreen extends Screen {
 
     @Override
     public void tick() {
+        if (scrollCoolDown >= 0) {
+            scrollCoolDown--;
+            if (scrollCoolDown == 0) {
+                stopAndEmptyTiles();
+                this.updateCenter.run();
+                this.updateCenter = () -> {
+                };
+                this.showYToolTip = false;
+            }
+        }
         super.tick();
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseZ, double pDelta) {
-        Vector4f vector4f = new Vector4f((float) mouseX - width / 2.0F, 0, (float) mouseZ - height / 2.0F, 1);
+        Vector4f vector4f = new Vector4f(this.width / 2.0F, 0, this.height / 2.0F, 1);
         vector4f.transform(matrix4f);
         this.y += pDelta * -1;
         this.tiles.clear();
-        stopAndEmptyTiles();
-        updateCenter((int) vector4f.x(), (int) vector4f.z(), scale);
+        this.updateCenter = () -> updateCenter((int) vector4f.x(), (int) vector4f.z(), scale);
+        this.showYToolTip = true;
+        this.scrollCoolDown = 20;
         return super.mouseScrolled(mouseX, mouseZ, pDelta);
     }
 
@@ -194,17 +216,16 @@ public class WorldViewingScreen extends Screen {
             for (int z = 0; z <= this.screenTileHeight; z++) {
                 int tileX = this.onScreenWorldMinTileX + x;
                 int tileZ = this.onScreenWorldMinTileZ + z;
+                int tileMinRenderX = tileToBlock(tileX);
+                int tileMinRenderZ = tileToBlock(tileZ);
                 long tileKey = tileKey(tileX, tileZ);
                 if (tiles.containsKey(tileKey)) {
                     CompletableFuture<Tile> tileCompletableFuture = tiles.get(tileKey);
                     Tile tileFuture = tileCompletableFuture.getNow(null);
-                    if (tileFuture != null) {
-                        int tileMinRenderX = tileToBlock(tileX);
-                        int tileMinRenderZ = tileToBlock(tileZ);
-                        tileFuture.render(stack, tileMinRenderX, tileMinRenderZ);
-                    } else {
-//                        fill(stack, tileToBlock(screenTileX) - 1, tileToBlock(screenTileZ) - 1, tileToMaxBlock(screenTileX), tileToMaxBlock(screenTileZ), FastColor.ARGB32.color(255, 0, 0, 0), bufferbuilder);
-                    }
+
+                    Objects.requireNonNullElse(tileFuture, BLANK_TILE).render(stack, tileMinRenderX, tileMinRenderZ);
+                } else {
+                    BLANK_TILE.render(stack, tileMinRenderX, tileMinRenderZ);
                 }
             }
         }
@@ -218,8 +239,11 @@ public class WorldViewingScreen extends Screen {
 
         fill(stack, screenPlayerX - 5, screenPlayerZ - 5, screenPlayerX + 5, screenPlayerZ + 5, FastColor.ARGB32.color(255, 255, 0, 255));
 
-        renderPositionTooltip(stack, mouseX, mouseZ);
-
+        if (this.showYToolTip && !readHeightmap) {
+            renderTooltip(stack, new TextComponent(String.format("y= %s", this.y)), mouseX, mouseZ);
+        } else {
+            renderPositionTooltip(stack, mouseX, mouseZ);
+        }
 
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
@@ -241,12 +265,10 @@ public class WorldViewingScreen extends Screen {
 
         if (tiles.containsKey(worldTileKey)) {
             CompletableFuture<Tile> tileCompletableFuture = tiles.get(worldTileKey);
-            Tile tileFuture = tileCompletableFuture.getNow(null);
-            if (tileFuture != null) {
-                DataAtPosition dataAtMousePosition = tileFuture.dataAtPositions[localXTile][localZTile];
-                MutableComponent component = new TextComponent(String.format("x=%s, y=%s, z=%s", flooredX, y, flooredZ)).append(" | ").append(dataAtMousePosition.displayName);
-                renderTooltip(stack, component, mouseX, mouseZ);
-            }
+            Tile tile = Objects.requireNonNullElse(tileCompletableFuture.getNow(null), BLANK_TILE);
+            DataAtPosition dataAtMousePosition = tile.dataAtPositions[localXTile][localZTile];
+            MutableComponent component = new TextComponent(String.format("x=%s, y=%s, z=%s", flooredX, y, flooredZ)).append(" | ").append(dataAtMousePosition.displayName);
+            renderTooltip(stack, component, mouseX, mouseZ);
         }
     }
 
@@ -260,37 +282,6 @@ public class WorldViewingScreen extends Screen {
             updateCenter((int) vector4f.x(), (int) vector4f.z(), scale *= 2);
         }
         return super.mouseClicked(mouseX, mouseZ, button);
-    }
-
-    public static void fill(PoseStack pPoseStack, float pMinX, float pMinY, float pMaxX, float pMaxY, int pColor, BufferBuilder bufferBuilder) {
-        innerFill(pPoseStack.last().pose(), pMinX, pMinY, pMaxX, pMaxY, pColor, bufferBuilder);
-    }
-
-    private static void innerFill(Matrix4f pMatrix, float pMinX, float pMinY, float pMaxX, float pMaxY, int pColor, BufferBuilder bufferbuilder) {
-        if (pMinX < pMaxX) {
-            float i = pMinX;
-            pMinX = pMaxX;
-            pMaxX = i;
-        }
-
-        if (pMinY < pMaxY) {
-            float j = pMinY;
-            pMinY = pMaxY;
-            pMaxY = j;
-        }
-
-        float f3 = (float) (pColor >> 24 & 255) / 255.0F;
-        float f = (float) (pColor >> 16 & 255) / 255.0F;
-        float f1 = (float) (pColor >> 8 & 255) / 255.0F;
-        float f2 = (float) (pColor & 255) / 255.0F;
-        bufferbuilder.vertex(pMatrix, (float) pMinX, (float) pMaxY, 0.0F).color(f, f1, f2, f3).endVertex();
-        bufferbuilder.vertex(pMatrix, (float) pMaxX, (float) pMaxY, 0.0F).color(f, f1, f2, f3).endVertex();
-        bufferbuilder.vertex(pMatrix, (float) pMaxX, (float) pMinY, 0.0F).color(f, f1, f2, f3).endVertex();
-        bufferbuilder.vertex(pMatrix, (float) pMinX, (float) pMinY, 0.0F).color(f, f1, f2, f3).endVertex();
-    }
-
-    public static boolean isInside(int minX, int minY, int maxX, int maxY, int x, int y) {
-        return x >= minX && x <= maxX && y >= minY && y <= maxY;
     }
 
     public static int getX(long regionPos) {
@@ -314,6 +305,14 @@ public class WorldViewingScreen extends Screen {
         return tileCoord << 6;
     }
 
+    public static int tileToChunk(int tileCoord) {
+        return SectionPos.blockToSectionCoord(tileToBlock(tileCoord));
+    }
+
+    public static int chunkToTile(int chunkCoord) {
+        return blockToTile(SectionPos.sectionToBlockCoord(chunkCoord));
+    }
+
     public static int tileToMaxBlock(int tileCoord) {
         return tileToBlock(tileCoord + 1);
     }
@@ -328,17 +327,14 @@ public class WorldViewingScreen extends Screen {
     }
 
     private void stopAndEmptyTiles() {
-        EXECUTOR_SERVICE.shutdownNow();
-//        while (this.tiles.size() > 0) {
-//            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
-//            Tile tile = tileCompletableFuture.getNow(null);
-//            if (tile != null) {
-//                tile.texture.close();
-//            }
-//            tileCompletableFuture.cancel(true);
-//        }
-        this.tiles.clear();
-        EXECUTOR_SERVICE = new ForkJoinPool();
+        while (this.tiles.size() > 0) {
+            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
+            Tile tile = tileCompletableFuture.getNow(null);
+            if (tile != null) {
+                tile.texture.close();
+            }
+            tileCompletableFuture.cancel(true);
+        }
     }
 
     public static void invertMatrix(Matrix4f matrix4f) {

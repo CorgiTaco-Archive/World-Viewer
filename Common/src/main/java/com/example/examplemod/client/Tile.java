@@ -3,12 +3,11 @@ package com.example.examplemod.client;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.world.level.biome.Biome;
+import net.minecraft.util.FastColor;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.util.function.Function;
@@ -16,7 +15,6 @@ import java.util.function.Function;
 import static com.example.examplemod.client.WorldViewingScreen.*;
 
 public class Tile {
-    private final BoundingBox worldBoundingBox;
 
     public final WorldViewingScreen.DataAtPosition[][] dataAtPositions;
 
@@ -24,7 +22,7 @@ public class Tile {
     private final int textureSizeWidth;
     private final int textureSizeHeight;
 
-    public Tile(Object2IntOpenHashMap<Holder<Biome>> color, int worldTileX, int y, int worldTileZ, Function<BlockPos, Holder<Biome>> biomeGetter) {
+    public Tile(int precision, int worldTileX, int y, int worldTileZ, Function<BlockPos, DataAtPosition> biomeGetter) {
         BoundingBox boundingBox = new BoundingBox(
             tileToBlock(worldTileX), y, tileToBlock(worldTileZ),
             tileToMaxBlock(worldTileX), y, tileToMaxBlock(worldTileZ)
@@ -34,17 +32,40 @@ public class Tile {
         NativeImage image = new NativeImage(textureSizeWidth, textureSizeHeight, false);
 
 
-        this.worldBoundingBox = boundingBox;
         dataAtPositions = new WorldViewingScreen.DataAtPosition[textureSizeWidth][textureSizeHeight];
         BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
-        for (int x = 0; x < textureSizeWidth; x++) {
-            for (int z = 0; z < textureSizeHeight; z++) {
-                mutableBlockPos.set(x + boundingBox.minX(), y, z + boundingBox.minZ());
-                Holder<Biome> biomeHolder = biomeGetter.apply(mutableBlockPos);
-                dataAtPositions[x][z] = new WorldViewingScreen.DataAtPosition(color.getInt(biomeHolder), getKey(biomeHolder.unwrapKey().orElseThrow().location()));
-                image.setPixelRGBA(x, z, color.getInt(biomeHolder));
+        for (int zoomedX = 0; zoomedX < textureSizeWidth; zoomedX += precision) {
+            for (int zoomedZ = 0; zoomedZ < textureSizeHeight; zoomedZ += precision) {
+                mutableBlockPos.set(zoomedX + boundingBox.minX(), y, zoomedZ + boundingBox.minZ());
+                DataAtPosition dataAtZoomedPosition = biomeGetter.apply(mutableBlockPos);
+                for (int x = 0; x < precision; x++) {
+                    for (int z = 0; z < precision; z++) {
+                        int dataX = zoomedX + x;
+                        int dataZ = zoomedZ + z;
+
+                        dataAtPositions[dataX][dataZ] = dataAtZoomedPosition;
+                        image.setPixelRGBA(dataX, dataZ, dataAtZoomedPosition.color());
+                    }
+                }
             }
         }
+        for (int chunkX = 0; chunkX < tileToChunk(blockToTile(textureSizeWidth)); chunkX++) {
+            for (int chunkZ = 0; chunkZ < tileToChunk(blockToTile(textureSizeWidth)); chunkZ++) {
+                ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
+                int chunkBoundaryColor = FastColor.ARGB32.color(255, 255, 255, 255);
+                if (textureSizeWidth > chunkPos.getMinBlockX()) {
+                    for (int xDraw = 0; xDraw < textureSizeHeight; xDraw++) {
+                        image.setPixelRGBA(chunkPos.getMinBlockX(), xDraw, chunkBoundaryColor);
+                    }
+                }
+                if (textureSizeHeight > chunkPos.getMinBlockZ()) {
+                    for (int xDraw = 0; xDraw < textureSizeWidth; xDraw++) {
+                        image.setPixelRGBA(xDraw, chunkPos.getMinBlockZ(), chunkBoundaryColor);
+                    }
+                }
+            }
+        }
+
         this.texture = new DynamicTexture(image);
     }
 
