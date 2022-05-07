@@ -2,7 +2,6 @@ package com.example.examplemod.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.gui.GuiComponent;
@@ -21,7 +20,7 @@ public class Tile {
 
     public final WorldViewingScreen.DataAtPosition[][] dataAtPositions;
 
-    private final DynamicTexture texture;
+    public final DynamicTexture texture;
     private final int textureSizeWidth;
     private final int textureSizeHeight;
 

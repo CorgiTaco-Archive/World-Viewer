@@ -4,25 +4,29 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Matrix4f;
+import com.mojang.math.Vector3f;
+import com.mojang.math.Vector4f;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import org.jetbrains.annotations.NotNull;
 
+import java.nio.FloatBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
@@ -47,74 +51,102 @@ public class WorldViewingScreen extends Screen {
             colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
         }
 //        Registry<Biome> biomeRegistry = level.registryAccess().ownedRegistry(Registry.BIOME_REGISTRY).orElseThrow();
-//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.FOREST), FastColor.ARGB32.color(255, 0, 255, 0));
-//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.SNOWY_BEACH), FastColor.ARGB32.color(255, 255, 0, 0));
+////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.FOREST), FastColor.ARGB32.color(255, 0, 255, 0));
+//        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.ICE_SPIKES), FastColor.ARGB32.color(255, 0, 0, 255));
+////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.BEACH), FastColor.ARGB32.color(255, 255, 255, 255));
+////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.OCEAN), FastColor.ARGB32.color(255, 0, 0, 255));
+////        colorForBiome.put(biomeRegistry.getHolderOrThrow(Biomes.PLAINS), FastColor.ARGB32.color(255, 255, 0, 255));
     }
 
-    private int middleWidth;
-    private int middleHeight;
     private int onScreenWorldMinX;
     private int onScreenWorldMaxX;
     private int onScreenWorldMinZ;
     private int onScreenWorldMaxZ;
-    private int screenLengthX;
-    private int screenLengthZ;
     private int onScreenWorldMinTileX;
-    private int onScreenWorldMaxTileX;
     private int onScreenWorldMinTileZ;
-    private int onScreenWorldMaxTileZ;
     private int screenTileWidth;
     private int screenTileHeight;
     private int playerX;
     private int playerZ;
     private float scale = 1;
+    private final Matrix4f matrix4f = new Matrix4f();
+    private Matrix4f matrix4fInverse = new Matrix4f();
 
     @Override
     protected void init() {
         colorAtCoord = new DataAtPosition[this.width + 1][this.height + 1];
         updateCenter(playerOrigin.getX(), playerOrigin.getZ(), 1);
-
         super.init();
     }
 
-    private void updateCenter(int xOrigin, int zOrigin, double scale) {
-        middleWidth = this.width - (this.width / 2);
-        middleHeight = this.height - (this.height / 2);
-        int onScreenWorldMinX = (int) (xOrigin - middleWidth / scale);
-        int onScreenWorldMaxX = (int) (xOrigin + middleWidth / scale);
-        int onScreenWorldMinZ = (int) (zOrigin - middleHeight / scale);
-        int onScreenWorldMaxZ = (int) (zOrigin + middleHeight / scale);
-        this.screenLengthX = onScreenWorldMaxX - onScreenWorldMinX;
-        this.screenLengthZ = onScreenWorldMaxZ - onScreenWorldMinZ;
+    private void updateCenter(int worldX, int worldZ, float scale) {
+        matrix4f.setIdentity();
+        matrix4f.multiply(Matrix4f.createScaleMatrix(scale, 1, scale));
+
+        matrix4f.translate(new Vector3f(worldX, 0, worldZ));
+        matrix4fInverse = matrix4f.copy();
+        invertMatrix(matrix4fInverse);
+//        if (!matrix4fInverse.invert()) {
+//            throw new IllegalArgumentException("Could not invert matrix");
+//        }
 
 
-        onScreenWorldMinTileX = blockToTile(onScreenWorldMinX);
-        onScreenWorldMaxTileX = blockToTile(onScreenWorldMaxX);
-        onScreenWorldMinTileZ = blockToTile(onScreenWorldMinZ);
-        onScreenWorldMaxTileZ = blockToTile(onScreenWorldMaxZ);
+        Vector4f vector4fEndWorldCoord = new Vector4f(width / 2.0F, 0, height / 2.0F, 1);
 
-        this.onScreenWorldMinX = tileToBlock(onScreenWorldMinTileX);
-        this.onScreenWorldMaxX = tileToBlock(onScreenWorldMaxTileX);
-        this.onScreenWorldMinZ = tileToBlock(onScreenWorldMinTileZ);
-        this.onScreenWorldMaxZ = tileToBlock(onScreenWorldMaxTileZ);
+        vector4fEndWorldCoord.transform(matrix4f);
+
+        Vector4f vector4fStartWorldCoord = new Vector4f(-width / 2.0F, 0, -height / 2.0F, 1);
+
+        vector4fStartWorldCoord.transform(matrix4f);
+
+        this.onScreenWorldMinX = Mth.floor(vector4fStartWorldCoord.x());
+        this.onScreenWorldMinZ = Mth.floor(vector4fStartWorldCoord.z());
+
+        this.onScreenWorldMaxX = Mth.ceil(vector4fEndWorldCoord.x());
+        this.onScreenWorldMaxZ = Mth.ceil(vector4fEndWorldCoord.z());
+
+
+        int minScreenTileX = blockToTile(onScreenWorldMinX);
+        int minScreenTileZ = blockToTile(onScreenWorldMinZ);
+
+        int maxScreenTileX = blockToTile(onScreenWorldMaxX) + 1;
+        int maxScreenTileZ = blockToTile(onScreenWorldMaxZ) + 1;
+
+        for (int x = minScreenTileX; x <= maxScreenTileX; x++) {
+            for (int z = minScreenTileZ; z <= maxScreenTileZ; z++) {
+                long tileKey = tileKey(x, z);
+                int finalX = x;
+                int finalZ = z;
+                System.out.printf("%s, %s%n", finalX, finalZ);
+
+                tiles.computeIfAbsent(tileKey, key ->
+                    CompletableFuture.supplyAsync(() ->
+                        new Tile(this.colorForBiome, finalX, finalZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
+                );
+            }
+        }
+        System.out.printf("Scale %s size %s%n", scale, tiles.size());
+
+        this.onScreenWorldMinTileX = minScreenTileX;
+        this.onScreenWorldMinTileZ = minScreenTileZ;
 
         this.playerX = playerOrigin.getX() - tileToBlock(onScreenWorldMinTileX);
         this.playerZ = playerOrigin.getZ() - tileToBlock(onScreenWorldMinTileZ);
 
-        screenTileWidth = blockToTile((int) (width / scale));
-        screenTileHeight = blockToTile((int) (height / scale));
+        this.screenTileWidth = maxScreenTileX - minScreenTileX + 1;
+        this.screenTileHeight = maxScreenTileZ - minScreenTileZ + 1;
 
-        for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
-            for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
-                int worldTileX = onScreenWorldMinTileX + screenTileX;
-                int worldTileZ = onScreenWorldMinTileZ + screenTileZ;
-                long tileKey = tileKey(worldTileX, worldTileZ);
-                tiles.computeIfAbsent(tileKey, key ->
-                    CompletableFuture.supplyAsync(() ->
-                        new Tile(this.colorForBiome, worldTileX, worldTileZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
-                );
-            }
-        }
+//        for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
+//            for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
+//                int worldTileX = onScreenWorldMinTileX + screenTileX;
+//                int worldTileZ = onScreenWorldMinTileZ + screenTileZ;
+//                long tileKey = tileKey(worldTileX, worldTileZ);
+//                tiles.computeIfAbsent(tileKey, key ->
+//                    CompletableFuture.supplyAsync(() ->
+//                        new Tile(this.colorForBiome, worldTileX, worldTileZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
+//                );
+//            }
+//        }
     }
 
     @NotNull
@@ -138,20 +170,37 @@ public class WorldViewingScreen extends Screen {
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
         stack.pushPose();
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+//        RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        stack.scale(this.scale, this.scale, 1);
-        for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
-            for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
-                int worldTileX = onScreenWorldMinTileX + screenTileX;
-                int worldTileZ = onScreenWorldMinTileZ + screenTileZ;
-                long tileKey = tileKey(worldTileX, worldTileZ);
+        Matrix4f swapCoordinates = new Matrix4f();
+        swapCoordinates.load(FloatBuffer.wrap(new float[]
+            {
+                1, 0, 0, 0,
+                0, 0, 1, 0,
+                0, 1, 0, 0,
+                0, 0, 0, 1
+            }
+        ));
+        Matrix4f translateMatrix = Matrix4f.createTranslateMatrix(this.width / 2F, this.height / 2F, 0);
+
+        Matrix4f worldToScreen = swapCoordinates.copy();
+        worldToScreen.multiply(matrix4fInverse);
+        worldToScreen.multiply(swapCoordinates);
+
+        worldToScreen.multiply(translateMatrix);
+
+        stack.mulPoseMatrix(worldToScreen);
+        for (int x = 0; x <= this.screenTileWidth; x++) {
+            for (int z = 0; z <= this.screenTileHeight; z++) {
+                int tileX = this.onScreenWorldMinTileX + x;
+                int tileZ = this.onScreenWorldMinTileZ + z;
+                long tileKey = tileKey(tileX, tileZ);
                 if (tiles.containsKey(tileKey)) {
                     CompletableFuture<Tile> tileCompletableFuture = tiles.get(tileKey);
                     Tile tileFuture = tileCompletableFuture.getNow(null);
                     if (tileFuture != null) {
-                        int tileMinRenderX = tileToBlock(screenTileX);
-                        int tileMinRenderZ = tileToBlock(screenTileZ);
+                        int tileMinRenderX = tileToBlock(tileX);
+                        int tileMinRenderZ = tileToBlock(tileZ);
                         tileFuture.render(stack, tileMinRenderX, tileMinRenderZ);
                     } else {
 //                        fill(stack, tileToBlock(screenTileX) - 1, tileToBlock(screenTileZ) - 1, tileToMaxBlock(screenTileX), tileToMaxBlock(screenTileZ), FastColor.ARGB32.color(255, 0, 0, 0), bufferbuilder);
@@ -159,11 +208,15 @@ public class WorldViewingScreen extends Screen {
                 }
             }
         }
-        int playerColor = FastColor.ARGB32.color(255, 255, 0, 255);
-        int playerScreenX = this.playerX;
-        int playerScreenZ = this.playerZ;
-        fill(stack, playerScreenX - 5, playerScreenZ - 5, playerScreenX + 5, playerScreenZ + 5, playerColor);
         stack.popPose();
+
+        Vector4f vector4f = new Vector4f(this.playerOrigin.getX(), this.playerOrigin.getY(), this.playerOrigin.getZ(), 1);
+        vector4f.transform(this.matrix4fInverse);
+
+        int screenPlayerX = Mth.floor(vector4f.x()) + this.width / 2;
+        int screenPlayerZ = Mth.floor(vector4f.z()) + this.height / 2;
+
+        fill(stack, screenPlayerX - 5, screenPlayerZ - 5, screenPlayerX + 5, screenPlayerZ + 5, FastColor.ARGB32.color(255, 255, 0, 255));
 
         renderPositionTooltip(stack, mouseX, mouseZ);
 
@@ -172,32 +225,39 @@ public class WorldViewingScreen extends Screen {
     }
 
     private void renderPositionTooltip(PoseStack stack, int mouseX, int mouseZ) {
-        int mouseXTile = blockToTile(mouseX);
-        int mouseZTile = blockToTile(mouseZ);
-        long worldTileKey = tileKey(onScreenWorldMinTileX + mouseXTile, onScreenWorldMinTileZ + mouseZTile);
+        Vector4f vector4f = new Vector4f(mouseX - width / 2.0f, 0, mouseZ - height / 2.0f, 1);
+        vector4f.transform(this.matrix4f);
+
+        int flooredX = Mth.floor(vector4f.x());
+        int flooredZ = Mth.floor(vector4f.z());
+
+        int mouseXTile = blockToTile(flooredX);
+        int mouseZTile = blockToTile(flooredZ);
+
+        int localXTile = flooredX - tileToBlock(mouseXTile);
+        int localZTile = flooredZ - tileToBlock(mouseZTile);
+
+        long worldTileKey = tileKey(mouseXTile, mouseZTile);
+
         if (tiles.containsKey(worldTileKey)) {
             CompletableFuture<Tile> tileCompletableFuture = tiles.get(worldTileKey);
             Tile tileFuture = tileCompletableFuture.getNow(null);
             if (tileFuture != null) {
-                if (isInside(0, 0, width, height, mouseX, mouseZ)) {
-                    int positionDataX = mouseX - tileToBlock(mouseXTile);
-                    int positionDataZ = mouseZ - tileToBlock(mouseZTile);
-                    DataAtPosition dataAtMousePosition = tileFuture.dataAtPositions[positionDataX][positionDataZ];
-                    renderTooltip(stack, new TextComponent(String.format("x=%s, y=%s, z=%s", this.onScreenWorldMinX + mouseX, 63, this.onScreenWorldMinZ + mouseZ)).append(" | ").append(dataAtMousePosition.displayName), mouseX, mouseZ);
-                }
+                DataAtPosition dataAtMousePosition = tileFuture.dataAtPositions[localXTile][localZTile];
+                MutableComponent component = new TextComponent(String.format("x=%s, y=%s, z=%s", flooredX, 63, flooredZ)).append(" | ").append(dataAtMousePosition.displayName);
+                renderTooltip(stack, component, mouseX, mouseZ);
             }
         }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseZ, int button) {
+        Vector4f vector4f = new Vector4f((float) mouseX - width / 2.0F, 0, (float) mouseZ - height / 2.0F, 1);
+        vector4f.transform(matrix4f);
         if (button == 0) {
-            while (this.tiles.size() > 100) {
-                this.tiles.removeFirst().cancel(true);
-            }
-            updateCenter((int) (this.onScreenWorldMinX + mouseX), (int) (this.onScreenWorldMinZ + mouseZ), 1);
+            updateCenter((int) vector4f.x(), (int) vector4f.z(), scale);
         } else {
-            updateCenter(this.onScreenWorldMinX, this.onScreenWorldMinZ, scale *= 0.5);
+            updateCenter((int) vector4f.x(), (int) vector4f.z(), scale *= 2);
         }
         return super.mouseClicked(mouseX, mouseZ, button);
     }
@@ -264,8 +324,18 @@ public class WorldViewingScreen extends Screen {
     @Override
     public void onClose() {
         while (this.tiles.size() > 0) {
-            this.tiles.removeFirst().cancel(true);
+            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
+            Tile tile = tileCompletableFuture.getNow(null);
+            if (tile != null) {
+                tile.texture.close();
+            }
+            tileCompletableFuture.cancel(true);
         }
         super.onClose();
+    }
+
+    public static void invertMatrix(Matrix4f matrix4f) {
+        float det = matrix4f.adjugateAndDet();
+        matrix4f.multiply(1 / det);
     }
 }
