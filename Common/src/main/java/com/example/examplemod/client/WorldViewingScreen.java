@@ -1,5 +1,6 @@
 package com.example.examplemod.client;
 
+import com.example.examplemod.mixin.UtilAccess;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Matrix4f;
@@ -31,10 +32,9 @@ import java.nio.FloatBuffer;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ForkJoinPool;
 
 public class WorldViewingScreen extends Screen {
-    private static ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(2); //TODO: Find a better way / time to create this
+    private static ExecutorService EXECUTOR_SERVICE = UtilAccess.invokeMakeExecutor("world-viewer");
     MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
     private final BlockPos playerOrigin = Minecraft.getInstance().player.blockPosition();
     private static final Tile BLANK_TILE = new Tile(1, 1, 0, 1, pos -> new DataAtPosition(FastColor.ARGB32.color(255, 0, 0, 0), new TextComponent("???")));
@@ -74,11 +74,12 @@ public class WorldViewingScreen extends Screen {
     private boolean showYToolTip;
     private Runnable updateCenter = () -> {
     };
+    int precision = 4;
 
     @Override
     protected void init() {
         colorAtCoord = new DataAtPosition[this.width + 1][this.height + 1];
-        updateCenter(playerOrigin.getX(), playerOrigin.getZ(), 1);
+        updateCenter(playerOrigin.getX(), playerOrigin.getZ(), scale);
         super.init();
     }
 
@@ -120,11 +121,9 @@ public class WorldViewingScreen extends Screen {
                 long tileKey = tileKey(x, z);
                 int finalX = x;
                 int finalZ = z;
-                System.out.printf("%s, %s%n", finalX, finalZ);
-
                 tiles.computeIfAbsent(tileKey, key ->
                     CompletableFuture.supplyAsync(() ->
-                        new Tile(4, finalX, y, finalZ, blockPos -> {
+                        new Tile(this.precision, finalX, y, finalZ, blockPos -> {
                             if (readHeightmap) {
                                 int baseHeight = level.getChunkSource().getGenerator().getBaseHeight(blockPos.getX(), blockPos.getZ(), Heightmap.Types.OCEAN_FLOOR_WG, level.getLevel());
                                 Holder<Biome> biomeHolder = level.getBiome(new BlockPos(blockPos.getX(), baseHeight, blockPos.getZ()));
@@ -137,8 +136,6 @@ public class WorldViewingScreen extends Screen {
                 );
             }
         }
-        System.out.printf("Scale %s size %s%n", scale, tiles.size());
-
         this.onScreenWorldMinTileX = minScreenTileX;
         this.onScreenWorldMinTileZ = minScreenTileZ;
 
@@ -181,7 +178,7 @@ public class WorldViewingScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseZ, double pDelta) {
         Vector4f vector4f = new Vector4f(this.width / 2.0F, 0, this.height / 2.0F, 1);
         vector4f.transform(matrix4f);
-        this.y += pDelta * -1;
+        this.y = (int) Mth.clamp(this.y + pDelta * -8, Integer.MIN_VALUE + 1, Integer.MAX_VALUE - 1);
         this.tiles.clear();
         this.updateCenter = () -> updateCenter((int) vector4f.x(), (int) vector4f.z(), scale);
         this.showYToolTip = true;
