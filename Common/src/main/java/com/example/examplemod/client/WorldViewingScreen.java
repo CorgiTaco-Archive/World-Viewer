@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 
 public class WorldViewingScreen extends Screen {
-    private static final ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(); //TODO: Find a better way / time to create this
+    private static ExecutorService EXECUTOR_SERVICE = new ForkJoinPool(); //TODO: Find a better way / time to create this
     MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
     private final BlockPos playerOrigin = Minecraft.getInstance().player.blockPosition();
 
@@ -68,6 +68,7 @@ public class WorldViewingScreen extends Screen {
     private int screenTileHeight;
     private int playerX;
     private int playerZ;
+    private int y = 63;
     private float scale = 1;
     private final Matrix4f matrix4f = new Matrix4f();
     private Matrix4f matrix4fInverse = new Matrix4f();
@@ -121,7 +122,7 @@ public class WorldViewingScreen extends Screen {
 
                 tiles.computeIfAbsent(tileKey, key ->
                     CompletableFuture.supplyAsync(() ->
-                        new Tile(this.colorForBiome, finalX, finalZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
+                        new Tile(this.colorForBiome, finalX, y, finalZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
                 );
             }
         }
@@ -135,18 +136,6 @@ public class WorldViewingScreen extends Screen {
 
         this.screenTileWidth = maxScreenTileX - minScreenTileX + 1;
         this.screenTileHeight = maxScreenTileZ - minScreenTileZ + 1;
-
-//        for (int screenTileX = 0; screenTileX <= screenTileWidth; screenTileX++) {
-//            for (int screenTileZ = 0; screenTileZ <= screenTileHeight; screenTileZ++) {
-//                int worldTileX = onScreenWorldMinTileX + screenTileX;
-//                int worldTileZ = onScreenWorldMinTileZ + screenTileZ;
-//                long tileKey = tileKey(worldTileX, worldTileZ);
-//                tiles.computeIfAbsent(tileKey, key ->
-//                    CompletableFuture.supplyAsync(() ->
-//                        new Tile(this.colorForBiome, worldTileX, worldTileZ, blockPos -> level.getBiome(blockPos)), EXECUTOR_SERVICE)
-//                );
-//            }
-//        }
     }
 
     @NotNull
@@ -165,6 +154,17 @@ public class WorldViewingScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseZ, double pDelta) {
+        Vector4f vector4f = new Vector4f((float) mouseX - width / 2.0F, 0, (float) mouseZ - height / 2.0F, 1);
+        vector4f.transform(matrix4f);
+        this.y += pDelta * -1;
+        this.tiles.clear();
+        stopAndEmptyTiles();
+        updateCenter((int) vector4f.x(), (int) vector4f.z(), scale);
+        return super.mouseScrolled(mouseX, mouseZ, pDelta);
     }
 
     @Override
@@ -244,7 +244,7 @@ public class WorldViewingScreen extends Screen {
             Tile tileFuture = tileCompletableFuture.getNow(null);
             if (tileFuture != null) {
                 DataAtPosition dataAtMousePosition = tileFuture.dataAtPositions[localXTile][localZTile];
-                MutableComponent component = new TextComponent(String.format("x=%s, y=%s, z=%s", flooredX, 63, flooredZ)).append(" | ").append(dataAtMousePosition.displayName);
+                MutableComponent component = new TextComponent(String.format("x=%s, y=%s, z=%s", flooredX, y, flooredZ)).append(" | ").append(dataAtMousePosition.displayName);
                 renderTooltip(stack, component, mouseX, mouseZ);
             }
         }
@@ -307,11 +307,11 @@ public class WorldViewingScreen extends Screen {
     }
 
     public static int blockToTile(int blockCoord) {
-        return blockCoord >> 7;
+        return blockCoord >> 9;
     }
 
     public static int tileToBlock(int tileCoord) {
-        return tileCoord << 7;
+        return tileCoord << 9;
     }
 
     public static int tileToMaxBlock(int tileCoord) {
@@ -323,15 +323,22 @@ public class WorldViewingScreen extends Screen {
 
     @Override
     public void onClose() {
-        while (this.tiles.size() > 0) {
-            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
-            Tile tile = tileCompletableFuture.getNow(null);
-            if (tile != null) {
-                tile.texture.close();
-            }
-            tileCompletableFuture.cancel(true);
-        }
+        stopAndEmptyTiles();
         super.onClose();
+    }
+
+    private void stopAndEmptyTiles() {
+        EXECUTOR_SERVICE.shutdown();
+//        while (this.tiles.size() > 0) {
+//            CompletableFuture<Tile> tileCompletableFuture = this.tiles.removeFirst();
+//            Tile tile = tileCompletableFuture.getNow(null);
+//            if (tile != null) {
+//                tile.texture.close();
+//            }
+//            tileCompletableFuture.cancel(true);
+//        }
+        this.tiles.clear();
+        EXECUTOR_SERVICE = new ForkJoinPool();
     }
 
     public static void invertMatrix(Matrix4f matrix4f) {

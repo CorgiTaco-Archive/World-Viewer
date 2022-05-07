@@ -24,10 +24,10 @@ public class Tile {
     private final int textureSizeWidth;
     private final int textureSizeHeight;
 
-    public Tile(Object2IntOpenHashMap<Holder<Biome>> color, int worldTileX, int worldTileZ, Function<BlockPos, Holder<Biome>> biomeGetter) {
+    public Tile(Object2IntOpenHashMap<Holder<Biome>> color, int worldTileX, int y, int worldTileZ, Function<BlockPos, Holder<Biome>> biomeGetter) {
         BoundingBox boundingBox = new BoundingBox(
-            tileToBlock(worldTileX), 0, tileToBlock(worldTileZ),
-            tileToMaxBlock(worldTileX), 0, tileToMaxBlock(worldTileZ)
+            tileToBlock(worldTileX), y, tileToBlock(worldTileZ),
+            tileToMaxBlock(worldTileX), y, tileToMaxBlock(worldTileZ)
         );
         textureSizeWidth = boundingBox.getXSpan() - 1;
         textureSizeHeight = boundingBox.getZSpan() - 1;
@@ -39,7 +39,7 @@ public class Tile {
         BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
         for (int x = 0; x < textureSizeWidth; x++) {
             for (int z = 0; z < textureSizeHeight; z++) {
-                mutableBlockPos.set(x + boundingBox.minX(), 63, z + boundingBox.minZ());
+                mutableBlockPos.set(x + boundingBox.minX(), y, z + boundingBox.minZ());
                 Holder<Biome> biomeHolder = biomeGetter.apply(mutableBlockPos);
                 dataAtPositions[x][z] = new WorldViewingScreen.DataAtPosition(color.getInt(biomeHolder), getKey(biomeHolder.unwrapKey().orElseThrow().location()));
                 image.setPixelRGBA(x, z, color.getInt(biomeHolder));
