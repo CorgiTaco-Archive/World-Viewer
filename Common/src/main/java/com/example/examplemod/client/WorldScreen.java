@@ -219,6 +219,11 @@ public class WorldScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
+        removeUneseen();
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    private void removeUneseen() {
         setWorldArea();
 
         List<Tile> render = this.toRender;
@@ -231,8 +236,6 @@ public class WorldScreen extends Screen {
                 this.submitted.remove(ChunkPos.asLong(SectionPos.blockToSectionCoord(worldX), SectionPos.blockToSectionCoord(worldZ)));
             }
         }
-
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -246,6 +249,7 @@ public class WorldScreen extends Screen {
             }
         } else {
             this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.2, 1.5);
+            removeUneseen();
         }
         this.scrollCooldown = 30;
         return true;
