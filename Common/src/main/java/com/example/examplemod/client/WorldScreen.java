@@ -43,7 +43,7 @@ public class WorldScreen extends Screen {
     private ExecutorService executorService = UtilAccess.invokeMakeExecutor("world-viewer");
 
 
-    List<CompletableFuture<List<Tile>>> tiles = new ArrayList<>();
+    private final List<CompletableFuture<List<Tile>>> tiles = new ArrayList<>();
 
     private final ServerLevel level;
 
@@ -60,6 +60,10 @@ public class WorldScreen extends Screen {
     private final List<Tile> toRender = new ArrayList<>();
 
     private BoundingBox worldArea;
+
+    private boolean heightMap = true;
+
+    private int sampleResolution = 8;
 
 
     public WorldScreen(Component $$0) {
@@ -128,7 +132,7 @@ public class WorldScreen extends Screen {
                             tilesForFuture.forEach(key -> {
                                 int worldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(key));
                                 int worldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(key));
-                                tiles.add(new Tile(this.origin.getY(), worldX, worldZ, size, this.level::getBiome, this.colorForBiome));
+                                tiles.add(new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, size, this.sampleResolution, this.level, this.colorForBiome));
                             });
                             return tiles;
                         }, executorService)
@@ -166,7 +170,7 @@ public class WorldScreen extends Screen {
 
         int worldX = this.origin.getX() - (screenCenterX - scaledMouseX);
         int worldZ = this.origin.getZ() - (screenCenterZ - scaledMouseZ);
-        MutableComponent toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, this.origin.getY(), worldZ));
+        MutableComponent toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, "???", worldZ));
 
 
         for (Tile tileToRender : this.toRender) {
@@ -178,7 +182,11 @@ public class WorldScreen extends Screen {
             tileToRender.render(stack, screenTileMinX, screenTileMinZ);
 
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
-                toolTipFrom.append(" | ").append(getTranslationComponent(tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)));
+                Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
+
+                toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, dataAtPosition.y(), worldZ));
+
+                toolTipFrom.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder()));
             }
         }
 
@@ -264,5 +272,25 @@ public class WorldScreen extends Screen {
         } else {
             return InputConstants.isKeyDown(window, keyValue);
         }
+    }
+
+    public static int blockToTile(int blockCoord) {
+        return blockCoord >> 6;
+    }
+
+    public static int tileToBlock(int tileCoord) {
+        return tileCoord << 6;
+    }
+
+    public static long tileKey(int tileX, int tileZ) {
+        return (long) tileX & 4294967295L | ((long) tileZ & 4294967295L) << 32;
+    }
+
+    public static int getTileX(long tilePos) {
+        return (int) (tilePos & 4294967295L);
+    }
+
+    public static int getTileZ(long tilePos) {
+        return (int) (tilePos >>> 32 & 4294967295L);
     }
 }
