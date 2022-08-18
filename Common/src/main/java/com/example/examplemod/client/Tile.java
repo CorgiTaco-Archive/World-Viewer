@@ -49,8 +49,8 @@ public class Tile {
     }
 
     public boolean isMouseIntersecting(int scaledMouseX, int scaledMouseZ, int screenTileMinX, int screenTileMinZ) {
-        boolean greaterThanMinX = scaledMouseX > screenTileMinX;
-        boolean greaterThanMinZ = scaledMouseZ > screenTileMinZ;
+        boolean greaterThanMinX = scaledMouseX >= screenTileMinX;
+        boolean greaterThanMinZ = scaledMouseZ >= screenTileMinZ;
         boolean lessThanMaxX = scaledMouseX < screenTileMinX + size;
         boolean lessThanMaxZ = scaledMouseZ < screenTileMinZ + size;
         return greaterThanMinX && greaterThanMinZ && lessThanMaxX && lessThanMaxZ;
