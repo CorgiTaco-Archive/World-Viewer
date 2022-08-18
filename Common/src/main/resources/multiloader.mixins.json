@@ -8,6 +8,7 @@
   ],
   "client": [
     "ExampleCommonMixin",
+    "client.KeyMappingAccess",
     "client.MixinOptionsScreen"
   ],
   "server": [
