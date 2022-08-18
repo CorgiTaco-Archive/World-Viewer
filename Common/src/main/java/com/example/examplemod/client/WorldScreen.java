@@ -13,12 +13,18 @@ import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +48,7 @@ public class WorldScreen extends Screen {
     private LongSet submitted = new LongOpenHashSet();
 
     Object2IntOpenHashMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
-    float scale = 0.3F;
+    float scale = 0.5F;
     int size = 16;
 
     private final List<Tile> toRender = new ArrayList<>();
@@ -83,7 +89,7 @@ public class WorldScreen extends Screen {
             }
         }
 
-        int tilesPerThreadCount = 100;
+        int tilesPerThreadCount = (int) (100 / scale);
         for (int i = 0; i < tilesToSubmit.size(); i += tilesPerThreadCount) {
             LongList longList = tilesToSubmit.subList(i, Math.min(tilesToSubmit.size(), i + tilesPerThreadCount));
             LongList tilesForFuture = new LongArrayList();
@@ -91,10 +97,13 @@ public class WorldScreen extends Screen {
             this.tiles.add(CompletableFuture.supplyAsync(
                     () -> {
                         ArrayList<Tile> tiles = new ArrayList<>();
-                        tilesForFuture.forEach(key -> tiles.add(new Tile(63, SectionPos.sectionToBlockCoord(ChunkPos.getX(key)), SectionPos.sectionToBlockCoord(ChunkPos.getZ(key)), size, blockPos -> this.colorForBiome.getInt(this.level.getBiome(blockPos)))));
+                        tilesForFuture.forEach(key -> {
+                            int worldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(key));
+                            int worldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(key));
+                            tiles.add(new Tile(63, worldX, worldZ, size, this.level::getBiome, this.colorForBiome));
+                        });
                         return tiles;
-                    },
-                    EXECUTOR_SERVICE)
+                    }, EXECUTOR_SERVICE)
             );
         }
 
@@ -119,20 +128,34 @@ public class WorldScreen extends Screen {
         stack.pushPose();
         stack.scale(scale, scale, 0);
 
-        int centerX = (int) ((this.width / 2) / scale);
-        int centerZ = (int) ((this.height / 2) / scale);
+        int screenCenterX = (int) ((this.width / 2) / scale);
+        int screenCenterZ = (int) ((this.height / 2) / scale);
 
-        for (Tile tile : this.toRender) {
-            int localX = ChunkPos.getX(originChunk) - SectionPos.blockToSectionCoord(tile.getWorldX());
-            int localZ = ChunkPos.getZ(originChunk) - SectionPos.blockToSectionCoord(tile.getWorldZ());
 
-            int screenTileMinX = (centerX + localX * size);
-            int screenTileMinZ = (centerZ + localZ * size);
-            tile.render(stack, screenTileMinX, screenTileMinZ);
+        int scaledMouseX = (int) (mouseX / scale);
+        int scaledMouseZ = (int) (mouseZ / scale);
+
+        int worldX = this.origin.getX() - (screenCenterX - scaledMouseX);
+        int worldZ = this.origin.getZ() - (screenCenterZ - scaledMouseZ);
+        MutableComponent toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, 63, worldZ));
+
+
+        for (Tile tileToRender : this.toRender) {
+            int localX = ChunkPos.getX(originChunk) - SectionPos.blockToSectionCoord(tileToRender.getWorldX());
+            int localZ = ChunkPos.getZ(originChunk) - SectionPos.blockToSectionCoord(tileToRender.getWorldZ());
+
+            int screenTileMinX = (screenCenterX + localX * size);
+            int screenTileMinZ = (screenCenterZ + localZ * size);
+            tileToRender.render(stack, screenTileMinX, screenTileMinZ);
+
+            if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
+                toolTipFrom.append(" | ").append(getTranslationComponent(tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)));
+            }
         }
 
-
         stack.popPose();
+
+        renderTooltip(stack, toolTipFrom, mouseX, mouseZ);
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
@@ -142,5 +165,19 @@ public class WorldScreen extends Screen {
             tile.cancel(true);
         }
         super.onClose();
+    }
+
+    @NotNull
+    private static Component getTranslationComponent(Holder<Biome> biomeHolder) {
+        ResourceLocation location = biomeHolder.unwrapKey().orElseThrow().location();
+        String string = "biome." + location.getNamespace() + "." + location.getPath();
+
+        Component hoverText;
+        if (Language.getInstance().has(string)) {
+            hoverText = new TranslatableComponent(string);
+        } else {
+            hoverText = new TextComponent(location.toString());
+        }
+        return hoverText;
     }
 }
