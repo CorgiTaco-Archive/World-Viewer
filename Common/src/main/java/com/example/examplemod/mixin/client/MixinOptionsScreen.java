@@ -1,6 +1,6 @@
 package com.example.examplemod.mixin.client;
 
-import com.example.examplemod.client.WorldViewingScreen;
+import com.example.examplemod.client.WorldScreen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.OptionsScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -22,8 +22,8 @@ public abstract class MixinOptionsScreen extends Screen {
     @Inject(method = "init", at = @At("RETURN"))
     private void addWorldViewButton(CallbackInfo ci) {
         if (minecraft.isLocalServer() && minecraft.getSingleplayerServer() != null) {
-            this.addRenderableWidget(new Button(this.width / 2 - 155, this.height / 6 + 144 - 6, 150, 20, new TranslatableComponent("Configurations..."), (p_96268_) -> {
-                this.minecraft.setScreen(new WorldViewingScreen(new TextComponent("")));
+            this.addRenderableWidget(new Button(this.width / 2 - 155, this.height / 6 + 144 - 6, 150, 20, new TranslatableComponent("World Viewer"), (p_96268_) -> {
+                this.minecraft.setScreen(new WorldScreen(new TextComponent("")));
             }));
         }
     }
