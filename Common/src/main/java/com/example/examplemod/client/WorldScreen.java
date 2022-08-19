@@ -2,12 +2,10 @@ package com.example.examplemod.client;
 
 import com.example.examplemod.mixin.UtilAccess;
 import com.example.examplemod.mixin.client.KeyMappingAccess;
+import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.longs.LongArrayList;
-import it.unimi.dsi.fastutil.longs.LongList;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -15,7 +13,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.SectionPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -25,7 +23,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -37,34 +34,44 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import static com.example.examplemod.util.LongPackingUtil.getTileX;
+import static com.example.examplemod.util.LongPackingUtil.getTileZ;
+
 public class WorldScreen extends Screen {
 
 
     private ExecutorService executorService = UtilAccess.invokeMakeExecutor("world-viewer");
 
 
-    private final List<CompletableFuture<List<Tile>>> tiles = new ArrayList<>();
+    private final Long2ObjectLinkedOpenHashMap<CompletableFuture<Tile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
 
     private final ServerLevel level;
 
-    private BlockPos.MutableBlockPos origin;
+    private final BlockPos.MutableBlockPos origin;
 
     private int scrollCooldown;
 
-    private LongSet submitted = new LongOpenHashSet();
+    private final LongSet submitted = new LongOpenHashSet();
 
-    Object2IntOpenHashMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
+    private final Object2IntOpenHashMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
     float scale = 0.5F;
-    int size = 16;
+
+    private int shift = 9;
+
+
+    int tileSize = tileToBlock(1);
 
     private final List<Tile> toRender = new ArrayList<>();
 
-    private BoundingBox worldArea;
+    private BoundingBox worldViewArea;
 
-    private boolean heightMap = true;
+    private boolean heightMap = false;
 
-    private int sampleResolution = 8;
+    private int sampleResolution = 16;
 
+    public LongList tilesToSubmit = new LongArrayList();
+
+    public int submittedTaskCoolDown = 0;
 
     public WorldScreen(Component $$0) {
         super($$0);
@@ -84,86 +91,103 @@ public class WorldScreen extends Screen {
         int screenCenterX = (int) ((this.width / 2) / scale);
         int screenCenterZ = (int) ((this.height / 2) / scale);
 
-        int xRange = SectionPos.blockToSectionCoord(screenCenterX) + 1;
-        int zRange = SectionPos.blockToSectionCoord(screenCenterZ) + 1;
-        this.worldArea = new BoundingBox(
-                this.origin.getX() - screenCenterX - SectionPos.sectionToBlockCoord(xRange),
-                level.getMinBuildHeight(),
-                this.origin.getZ() - screenCenterZ - SectionPos.sectionToBlockCoord(zRange),
-                this.origin.getX() + screenCenterX + SectionPos.sectionToBlockCoord(xRange),
-                level.getMaxBuildHeight(),
-                this.origin.getZ() + screenCenterZ + SectionPos.sectionToBlockCoord(zRange)
+        int xRange = blockToTile(screenCenterX) + 1;
+        int zRange = blockToTile(screenCenterZ) + 1;
+        this.worldViewArea = BoundingBox.fromCorners(
+                new Vec3i(
+                        this.origin.getX() - tileToBlock(xRange) - 1,
+                        level.getMinBuildHeight(),
+                        this.origin.getZ() - tileToBlock(zRange) - 1
+                ),
+                new Vec3i(
+                        this.origin.getX() + tileToBlock(xRange) + 1,
+                        level.getMaxBuildHeight(),
+                        this.origin.getZ() + tileToBlock(zRange) + 1
+                )
         );
     }
 
     @Override
     public void tick() {
         this.scrollCooldown--;
-
         if (scrollCooldown < 0) {
-
-            long originChunk = ChunkPos.asLong(this.origin);
-            int centerX = (int) ((this.width / 2) / scale);
-            int centerZ = (int) ((this.height / 2) / scale);
-
-            int xRange = SectionPos.blockToSectionCoord(centerX) + 1;
-            int zRange = SectionPos.blockToSectionCoord(centerZ) + 1;
-
-            LongList tilesToSubmit = new LongArrayList();
-            for (int x = -xRange; x <= xRange; x++) {
-                for (int z = -zRange; z <= zRange; z++) {
-                    int worldChunkX = ChunkPos.getX(originChunk) + x;
-                    int worldChunkZ = ChunkPos.getZ(originChunk) + z;
-                    long worldChunk = ChunkPos.asLong(worldChunkX, worldChunkZ);
-                    if (submitted.add(worldChunk)) {
-                        tilesToSubmit.add(worldChunk);
-                    }
-                }
-            }
-
-            int tilesPerThreadCount = (int) (100 / scale);
-            for (int i = 0; i < tilesToSubmit.size(); i += tilesPerThreadCount) {
-                LongList longList = tilesToSubmit.subList(i, Math.min(tilesToSubmit.size(), i + tilesPerThreadCount));
-                LongList tilesForFuture = new LongArrayList();
-                tilesForFuture.addAll(longList);
-                this.tiles.add(CompletableFuture.supplyAsync(
-                        () -> {
-                            ArrayList<Tile> tiles = new ArrayList<>();
-                            tilesForFuture.forEach(key -> {
-                                int worldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(key));
-                                int worldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(key));
-                                tiles.add(new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, size, this.sampleResolution, this.level, this.colorForBiome));
-                            });
-                            return tiles;
-                        }, executorService)
-                );
-            }
-
-
-            List<CompletableFuture<List<Tile>>> completableFutures = this.tiles;
-            for (int i = 0; i < completableFutures.size(); i++) {
-                CompletableFuture<List<Tile>> tileList = completableFutures.get(i);
-                List<Tile> tileListNow = tileList.getNow(null);
-                if (tileListNow != null) {
-                    this.toRender.addAll(tileListNow);
-                    this.tiles.remove(i);
-                }
-
-            }
+            handleTileTracking();
         }
         super.tick();
     }
 
+    private void handleTileTracking() {
+        long originChunk = tileKey(this.origin);
+        int centerX = (int) ((this.width / 2) / scale);
+        int centerZ = (int) ((this.height / 2) / scale);
+
+        int xRange = blockToTile(centerX) + 1;
+        int zRange = blockToTile(centerZ) + 1;
+
+        for (int x = -xRange; x <= xRange; x++) {
+            for (int z = -zRange; z <= zRange; z++) {
+                int worldChunkX = getTileX(originChunk) + x;
+                int worldChunkZ = getTileZ(originChunk) + z;
+                long worldChunk = LongPackingUtil.tileKey(worldChunkX, worldChunkZ);
+                if (submitted.add(worldChunk)) {
+                    tilesToSubmit.add(worldChunk);
+                }
+            }
+        }
+
+        if (submittedTaskCoolDown >= 0) {
+            int tilesPerThreadCount = 2;
+            int to = Math.min(tilesToSubmit.size(), tilesPerThreadCount);
+            LongList tilePositions = tilesToSubmit.subList(0, to);
+
+            for (long tilePos : tilePositions) {
+                this.trackedTileFutures.computeIfAbsent(tilePos, key ->
+                        CompletableFuture.supplyAsync(
+                                () -> {
+                                    int worldX = tileToBlock(getTileX(key));
+                                    int worldZ = tileToBlock(getTileZ(key));
+                                    return new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, this.tileSize, this.sampleResolution, this.level, this.colorForBiome);
+                                }, executorService)
+                );
+            }
+            this.tilesToSubmit.removeElements(0, to);
+        }
+
+        LongList toRemove = new LongArrayList();
+        this.trackedTileFutures.forEach((tilePos, future) -> {
+            int worldX = tileToBlock(getTileX(tilePos));
+            int worldZ = tileToBlock(getTileZ(tilePos));
+            if (this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
+                Tile tile = future.getNow(null);
+                if (tile != null) {
+                    this.toRender.add(tile);
+                    toRemove.add(tilePos);
+                }
+            } else {
+                if (!future.isCancelled()) {
+                    future.cancel(true);
+                    toRemove.add(tilePos);
+                    this.submitted.remove(tilePos);
+                }
+            }
+        });
+        toRemove.forEach(this.trackedTileFutures::remove);
+    }
+
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
-        long originChunk = ChunkPos.asLong(this.origin);
+        renderTiles(stack, mouseX, mouseZ);
+        super.render(stack, mouseX, mouseZ, partialTicks);
+    }
+
+    private void renderTiles(PoseStack stack, int mouseX, int mouseZ) {
+        long originChunk = tileKey(this.origin);
 
         stack.pushPose();
         stack.scale(scale, scale, 0);
 
         int screenCenterX = (int) ((this.width / 2) / scale);
         int screenCenterZ = (int) ((this.height / 2) / scale);
-
 
         int scaledMouseX = (int) (mouseX / scale);
         int scaledMouseZ = (int) (mouseZ / scale);
@@ -174,17 +198,17 @@ public class WorldScreen extends Screen {
 
 
         for (Tile tileToRender : this.toRender) {
-            int localX = ChunkPos.getX(originChunk) - SectionPos.blockToSectionCoord(tileToRender.getWorldX());
-            int localZ = ChunkPos.getZ(originChunk) - SectionPos.blockToSectionCoord(tileToRender.getWorldZ());
+            int localX = getTileX(originChunk) - blockToTile(tileToRender.getWorldX());
+            int localZ = getTileZ(originChunk) - blockToTile(tileToRender.getWorldZ());
 
-            int screenTileMinX = (screenCenterX + localX * size);
-            int screenTileMinZ = (screenCenterZ + localZ * size);
+            int screenTileMinX = (screenCenterX + localX * tileSize);
+            int screenTileMinZ = (screenCenterZ + localZ * tileSize);
             tileToRender.render(stack, screenTileMinX, screenTileMinZ);
 
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
                 Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
 
-                toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, dataAtPosition.y(), worldZ));
+                toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, dataAtPosition.worldPos().getY(), worldZ));
 
                 toolTipFrom.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder()));
             }
@@ -193,7 +217,6 @@ public class WorldScreen extends Screen {
         stack.popPose();
 
         renderTooltip(stack, toolTipFrom, mouseX, mouseZ);
-        super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
     @Override
@@ -239,9 +262,9 @@ public class WorldScreen extends Screen {
             Tile tileToRender = render.get(i);
             int worldX = tileToRender.getWorldX();
             int worldZ = tileToRender.getWorldZ();
-            if (!this.worldArea.intersects(worldX, worldZ, worldX, worldZ)) {
+            if (!this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
                 this.toRender.remove(i);
-                this.submitted.remove(ChunkPos.asLong(SectionPos.blockToSectionCoord(worldX), SectionPos.blockToSectionCoord(worldZ)));
+                this.submitted.remove(LongPackingUtil.tileKey(blockToTile(worldX), blockToTile(worldZ)));
             }
         }
     }
@@ -256,7 +279,7 @@ public class WorldScreen extends Screen {
                 this.toRender.clear();
             }
         } else {
-            this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.2, 1.5);
+            this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.05, 1.5);
             removeUneseen();
         }
         this.scrollCooldown = 30;
@@ -274,23 +297,15 @@ public class WorldScreen extends Screen {
         }
     }
 
-    public static int blockToTile(int blockCoord) {
-        return blockCoord >> 6;
+    public long tileKey(BlockPos pos) {
+        return LongPackingUtil.tileKey(blockToTile(pos.getX()), blockToTile(pos.getZ()));
     }
 
-    public static int tileToBlock(int tileCoord) {
-        return tileCoord << 6;
+    public int blockToTile(int blockCoord) {
+        return LongPackingUtil.blockToTile(blockCoord, this.shift);
     }
 
-    public static long tileKey(int tileX, int tileZ) {
-        return (long) tileX & 4294967295L | ((long) tileZ & 4294967295L) << 32;
-    }
-
-    public static int getTileX(long tilePos) {
-        return (int) (tilePos & 4294967295L);
-    }
-
-    public static int getTileZ(long tilePos) {
-        return (int) (tilePos >>> 32 & 4294967295L);
+    public int tileToBlock(int tileCoord) {
+        return LongPackingUtil.tileToBlock(tileCoord, this.shift);
     }
 }

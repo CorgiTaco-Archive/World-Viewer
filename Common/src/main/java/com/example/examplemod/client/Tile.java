@@ -47,7 +47,7 @@ public class Tile {
                     for (int z = 0; z < sampleResolution; z++) {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
-                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, y);
+                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX(), y, worldPos.getZ()));
                         nativeImage.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
 
                     }
@@ -86,7 +86,6 @@ public class Tile {
         RenderSystem.disableBlend();
     }
 
-    record DataAtPosition(Holder<Biome> biomeHolder, int y) {
-
+    record DataAtPosition(Holder<Biome> biomeHolder, BlockPos worldPos) {
     }
 }
