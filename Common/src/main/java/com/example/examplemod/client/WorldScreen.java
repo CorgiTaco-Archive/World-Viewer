@@ -5,8 +5,6 @@ import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
-import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -28,7 +26,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jetbrains.annotations.NotNull;
@@ -54,8 +51,6 @@ public class WorldScreen extends Screen {
     private int scrollCooldown;
 
     private final LongSet submitted = new LongOpenHashSet();
-
-    private final Object2IntMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
     float scale = 0.5F;
 
     private int shift = 9;
@@ -85,20 +80,20 @@ public class WorldScreen extends Screen {
 
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
 
+    // Wip.
+    private final WorldScreenThreadSafety threadSafety;
+
     public WorldScreen(Component $$0) {
         super($$0);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
         this.level = server.getLevel(Level.OVERWORLD);
 
-        ChunkGenerator generator = level.getChunkSource().getGenerator();
-        for (Holder<Biome> possibleBiome : generator.getBiomeSource().possibleBiomes()) {
-            colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
-        }
-
         BlockPos playerBlockPos = Minecraft.getInstance().player.blockPosition();
         origin = new BlockPos.MutableBlockPos().set(playerBlockPos).setY(Mth.clamp(playerBlockPos.getY(), this.level.getMinBuildHeight(), this.level.getMaxBuildHeight()));
         setWorldArea();
         this.structuresNeedUpdates = true;
+
+        threadSafety = new WorldScreenThreadSafety(level);
     }
 
 
@@ -158,11 +153,8 @@ public class WorldScreen extends Screen {
 
             for (long tilePos : tilePositions) {
                 this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    return CompletableFuture.supplyAsync(() -> {
-                        int worldX = getWorldXFromTileKey(key);
-                        int worldZ = getWorldZFromTileKey(key);
-                        return new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, this.tileSize, this.sampleResolution, this.level, this.colorForBiome);
-                    }, executorService);
+                    return threadSafety.computeLazily(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key);
+
                 });
             }
             this.tilesToSubmit.removeElements(0, to);
@@ -256,6 +248,8 @@ public class WorldScreen extends Screen {
 
     @Override
     public void onClose() {
+        threadSafety.close();
+
         if (!toRender.isEmpty()) {
             toRender.forEach(Tile::close);
         }
