@@ -5,7 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -25,8 +25,7 @@ import net.minecraft.world.level.levelgen.feature.StructureFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public final class Tile implements AutoCloseable {
     public final DynamicTexture texture;
@@ -36,18 +35,21 @@ public final class Tile implements AutoCloseable {
 
     private final DataAtPosition[][] dataAtPos;
 
-    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new Object2ObjectOpenHashMap<>();
+    private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
 
 
-    public Tile(boolean heightMap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntOpenHashMap<Holder<Biome>> colorLookup) {
+    public Tile(boolean heightMap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
         this.worldX = worldX;
         this.worldZ = worldZ;
         this.size = size;
         this.dataAtPos = new DataAtPosition[size][size];
-        NativeImage nativeImage = new NativeImage(size, size, false);
+
+        var generator = level.getChunkSource().getGenerator();
+
+        NativeImage pixel = new NativeImage(size, size, false);
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
-        ChunkGenerator generator = level.getChunkSource().getGenerator();
+
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
                 worldPos.set(worldX - sampleX, ySample, worldZ - sampleZ);
@@ -67,14 +69,13 @@ public final class Tile implements AutoCloseable {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
                         dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX(), y, worldPos.getZ()));
-                        nativeImage.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
-
+                        pixel.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
                     }
                 }
             }
         }
-        this.texture = new DynamicTexture(nativeImage);
 
+        texture = new DynamicTexture(pixel);
 
         for (Holder<StructureSet> structureSetHolder : level.registryAccess().registryOrThrow(Registry.STRUCTURE_SET_REGISTRY).asHolderIdMap()) {
             StructureSet structureSet = structureSetHolder.value();
@@ -127,7 +128,7 @@ public final class Tile implements AutoCloseable {
         return value.feature.canGenerate(level.registryAccess(), generator, generator.getBiomeSource(), level.getStructureManager(), level.getSeed(), new ChunkPos(x, z), value.config, level, value.biomes()::contains);
     }
 
-    public Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> getPositionsForStructure() {
+    public Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> getPositionsForStructure() {
         return positionsForStructure;
     }
 

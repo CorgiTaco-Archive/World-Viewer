@@ -5,8 +5,8 @@ import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -34,19 +34,13 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.ArrayList;
-import java.util.Formatter;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.*;
+import java.util.concurrent.*;
 
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
 public class WorldScreen extends Screen {
-
 
     private ExecutorService executorService = createExecutor();
 
@@ -61,7 +55,7 @@ public class WorldScreen extends Screen {
 
     private final LongSet submitted = new LongOpenHashSet();
 
-    private final Object2IntOpenHashMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
+    private final Object2IntMap<Holder<Biome>> colorForBiome = new Object2IntOpenHashMap<>();
     float scale = 0.5F;
 
     private int shift = 9;
@@ -69,7 +63,8 @@ public class WorldScreen extends Screen {
 
     int tileSize = tileToBlock(1);
 
-    private final List<Tile> toRender = new ArrayList<>();
+    // Concurrent to avoid locking the main thread and will be replaced with batching later on.
+    private final Queue<Tile> toRender = new ConcurrentLinkedQueue<>();
 
     private BoundingBox worldViewArea;
 
@@ -83,11 +78,12 @@ public class WorldScreen extends Screen {
 
     // String formatting
     private final StringBuilder builder = new StringBuilder();
-    private final Formatter formatter = new Formatter();
+
+    private final Formatter formatter = new Formatter(builder);
 
     private boolean structuresNeedUpdates;
 
-    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new Object2ObjectOpenHashMap<>();
+    private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
 
     public WorldScreen(Component $$0) {
         super($$0);
@@ -161,37 +157,37 @@ public class WorldScreen extends Screen {
             LongList tilePositions = tilesToSubmit.subList(0, to);
 
             for (long tilePos : tilePositions) {
-                this.trackedTileFutures.computeIfAbsent(tilePos, key ->
-                        CompletableFuture.supplyAsync(
-                                () -> {
-                                    int worldX = getWorldXFromTileKey(key);
-                                    int worldZ = getWorldZFromTileKey(key);
-                                    return new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, this.tileSize, this.sampleResolution, this.level, this.colorForBiome);
-                                }, executorService)
-                );
+                this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
+                    return CompletableFuture.supplyAsync(() -> {
+                        int worldX = getWorldXFromTileKey(key);
+                        int worldZ = getWorldZFromTileKey(key);
+                        return new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, this.tileSize, this.sampleResolution, this.level, this.colorForBiome);
+                    }, executorService);
+                });
             }
             this.tilesToSubmit.removeElements(0, to);
         }
 
         LongList toRemove = new LongArrayList();
-        this.trackedTileFutures.forEach((tilePos, future) -> {
+        trackedTileFutures.forEach((tilePos, future) -> {
             int worldX = getWorldXFromTileKey(tilePos);
             int worldZ = getWorldZFromTileKey(tilePos);
             if (this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
-                Tile tile = future.getNow(null);
-                if (tile != null) {
-                    this.toRender.add(tile);
-                    tile.getPositionsForStructure().forEach(((configuredStructureFeatureHolder, longs) ->
-                            this.positionsForStructure.computeIfAbsent(configuredStructureFeatureHolder, key -> new LongArraySet()).addAll(longs))
-                    );
+                future.thenAcceptAsync(tile -> {
+                    toRender.add(tile);
+
+                    tile.getPositionsForStructure().forEach((holder, longs) -> {
+                        positionsForStructure.computeIfAbsent(holder, key -> new LongArraySet()).addAll(longs);
+                    });
+
                     toRemove.add(tilePos);
-                }
-            } else {
-                if (!future.isCancelled()) {
-                    future.cancel(true);
-                    toRemove.add(tilePos);
-                    this.submitted.remove(tilePos);
-                }
+                }, executorService);
+
+            } else if (!future.isCancelled()) {
+                future.cancel(true);
+
+                toRemove.add(tilePos);
+                this.submitted.remove(tilePos);
             }
         });
         toRemove.forEach(this.trackedTileFutures::remove);
@@ -217,7 +213,7 @@ public class WorldScreen extends Screen {
         int worldZ = this.origin.getZ() - (screenCenterZ - scaledMouseZ);
 
         builder.setLength(0);
-        MutableComponent xyzTooltip = new TextComponent(formatter.format("%s, %s, %s", worldX, "???", worldZ).toString());
+        MutableComponent tooltip = new TextComponent(formatter.format("%s, %s, %s", worldX, "???", worldZ).toString());
 
         for (Tile tileToRender : this.toRender) {
             int localX = getLocalXFromWorldX(tileToRender.getWorldX());
@@ -230,11 +226,10 @@ public class WorldScreen extends Screen {
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
                 Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
 
-                xyzTooltip = new TextComponent(String.format("%s, %s, %s", dataAtPosition.worldPos().getX(), dataAtPosition.worldPos().getY(), dataAtPosition.worldPos().getZ()));
-
-                xyzTooltip.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder(), builder, formatter));
+                builder.setLength(0);
+                var pos = dataAtPosition.worldPos();
+                tooltip = new TextComponent(formatter.format("%s, %s, %s | ", pos.getX(), pos.getY(), pos.getZ()).toString()).append(getTranslationComponent(dataAtPosition.biomeHolder(), builder, formatter));
             }
-
         }
 
         this.positionsForStructure.forEach(((configuredStructureFeatureHolder, longs) -> {
@@ -256,7 +251,7 @@ public class WorldScreen extends Screen {
 
         stack.popPose();
 
-        renderTooltip(stack, xyzTooltip, mouseX, mouseZ);
+        renderTooltip(stack, tooltip, mouseX, mouseZ);
     }
 
     @Override
@@ -305,7 +300,10 @@ public class WorldScreen extends Screen {
                 executorService.shutdownNow();
                 executorService = createExecutor();
 
-                this.toRender.clear();
+                toRender.removeIf(tile -> {
+                    tile.close();
+                    return true;
+                });
             }
         } else {
             this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.05, 1.5);
