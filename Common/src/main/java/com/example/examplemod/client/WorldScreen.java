@@ -25,6 +25,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
@@ -332,10 +334,15 @@ public class WorldScreen extends Screen {
     }
 
     private static ExecutorService createExecutor() {
-        return Executors.newFixedThreadPool(4, r -> {
-            var thread = Executors.defaultThreadFactory().newThread(r);
-            thread.setDaemon(true);
-            return thread;
+        return Executors.newFixedThreadPool(4, new ThreadFactory() {
+            private final ThreadFactory backing = Executors.defaultThreadFactory();
+
+            @Override
+            public Thread newThread(@NotNull Runnable r) {
+                var thread = backing.newThread(r);
+                thread.setDaemon(true);
+                return thread;
+            }
         });
     }
 
