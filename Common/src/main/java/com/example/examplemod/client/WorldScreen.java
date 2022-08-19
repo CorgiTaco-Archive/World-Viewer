@@ -76,7 +76,7 @@ public class WorldScreen extends Screen {
     public WorldScreen(Component $$0) {
         super($$0);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        this.level = server.getLevel(Level.OVERWORLD);
+        this.level = server.getLevel(Level.END);
 
         for (Holder<Biome> possibleBiome : level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes()) {
             colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
@@ -208,7 +208,7 @@ public class WorldScreen extends Screen {
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
                 Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
 
-                toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, dataAtPosition.worldPos().getY(), worldZ));
+                toolTipFrom = new TextComponent(String.format("%s, %s, %s", dataAtPosition.worldPos().getX(), dataAtPosition.worldPos().getY(), dataAtPosition.worldPos().getZ()));
 
                 toolTipFrom.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder()));
             }
@@ -221,16 +221,18 @@ public class WorldScreen extends Screen {
 
     @Override
     public void onClose() {
-        terminateAllFutures();
+        terminateAllFutures(false);
         super.onClose();
     }
 
-    private void terminateAllFutures() {
+    private void terminateAllFutures(boolean makeNewFuture) {
         executorService.shutdown();
 
         while (!executorService.isShutdown()) {
         }
-        executorService = UtilAccess.invokeMakeExecutor("world-viewer");
+        if (makeNewFuture) {
+            executorService = UtilAccess.invokeMakeExecutor("world-viewer");
+        }
     }
 
     @NotNull
@@ -263,7 +265,9 @@ public class WorldScreen extends Screen {
             int worldX = tileToRender.getWorldX();
             int worldZ = tileToRender.getWorldZ();
             if (!this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
-                this.toRender.remove(i);
+                Tile removed = this.toRender.remove(i);
+                removed.close();
+
                 this.submitted.remove(LongPackingUtil.tileKey(blockToTile(worldX), blockToTile(worldZ)));
             }
         }
@@ -275,7 +279,7 @@ public class WorldScreen extends Screen {
             if (!this.level.isOutsideBuildHeight((int) (this.origin.getY() + delta))) {
                 this.origin.move(0, (int) delta, 0);
                 this.submitted.clear();
-                terminateAllFutures();
+                terminateAllFutures(true);
                 this.toRender.clear();
             }
         } else {

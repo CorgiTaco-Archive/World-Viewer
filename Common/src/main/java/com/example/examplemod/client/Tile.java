@@ -47,7 +47,7 @@ public class Tile {
                     for (int z = 0; z < sampleResolution; z++) {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
-                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX(), y, worldPos.getZ()));
+                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX() + x, y, worldPos.getZ() + z));
                         nativeImage.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
 
                     }
@@ -76,6 +76,10 @@ public class Tile {
 
     public DataAtPosition getBiomeAtMousePosition(int mouseX, int mouseZ, int screenTileMinX, int screenTileMinZ) {
         return this.dataAtPos[mouseX - screenTileMinX][mouseZ - screenTileMinZ];
+    }
+
+    public void close() {
+        this.texture.close();
     }
 
 
