@@ -23,10 +23,6 @@ minecraft {
 
 dependencies {
     compileOnly group:'org.spongepowered', name:'mixin', version:'0.8.5'
-
-    implementation "net.daporkchop.lib:common:0.5.7-SNAPSHOT"
-    implementation "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
-    implementation "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
 }
 
 processResources {

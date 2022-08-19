@@ -41,6 +41,23 @@ subprojects {
             url = "https://maven.daporkchop.net/"
         }
     }
+
+    project.ext.lwjglVersion = "3.3.1"
+    project.ext.jomlVersion = "1.10.4"
+    project.ext.lwjglNatives = "natives-windows"
+
+    dependencies {
+        implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
+
+        implementation "net.daporkchop.lib:common:0.5.7-SNAPSHOT"
+        implementation "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
+        implementation "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
+
+        implementation "org.lwjgl:lwjgl"
+        implementation "org.lwjgl:lwjgl-rpmalloc"
+        runtimeOnly "org.lwjgl:lwjgl::$lwjglNatives"
+        runtimeOnly "org.lwjgl:lwjgl-rpmalloc::$lwjglNatives"
+    }
     
 
     tasks.withType(JavaCompile).configureEach {

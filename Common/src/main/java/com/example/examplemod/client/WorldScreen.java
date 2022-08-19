@@ -190,6 +190,7 @@ public class WorldScreen extends Screen {
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
         renderTiles(stack, mouseX, mouseZ);
+        sprite.draw();
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
