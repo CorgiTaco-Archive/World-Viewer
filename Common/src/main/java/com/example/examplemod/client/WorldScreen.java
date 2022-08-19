@@ -31,7 +31,10 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.*;
+import java.util.Formatter;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
@@ -71,16 +74,16 @@ public class WorldScreen extends Screen {
 
     public int submittedTaskCoolDown = 0;
 
-    // String formatting
     private final StringBuilder builder = new StringBuilder();
 
     private final Formatter formatter = new Formatter(builder);
 
     private boolean structuresNeedUpdates;
 
-    private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
+    private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new ConcurrentHashMap<>();
 
     // Wip.
+    private final WorldScreenStructureSprite sprite = new WorldScreenStructureSprite();
     private final WorldScreenThreadSafety threadSafety;
 
     public WorldScreen(Component $$0) {
@@ -153,14 +156,13 @@ public class WorldScreen extends Screen {
 
             for (long tilePos : tilePositions) {
                 this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    return threadSafety.computeLazily(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key);
-
+                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key);
                 });
             }
             this.tilesToSubmit.removeElements(0, to);
         }
 
-        LongList toRemove = new LongArrayList();
+        Set<Long> toRemove = ConcurrentHashMap.newKeySet();
         trackedTileFutures.forEach((tilePos, future) -> {
             int worldX = getWorldXFromTileKey(tilePos);
             int worldZ = getWorldZFromTileKey(tilePos);
@@ -249,6 +251,7 @@ public class WorldScreen extends Screen {
     @Override
     public void onClose() {
         threadSafety.close();
+        sprite.close();
 
         if (!toRender.isEmpty()) {
             toRender.forEach(Tile::close);
