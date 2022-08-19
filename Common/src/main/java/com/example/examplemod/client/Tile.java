@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.Heightmap;
 
-public class Tile {
+public final class Tile implements AutoCloseable {
     public final DynamicTexture texture;
     private final int worldX;
     private final int worldZ;
@@ -78,16 +78,16 @@ public class Tile {
         return this.dataAtPos[mouseX - screenTileMinX][mouseZ - screenTileMinZ];
     }
 
-    public void close() {
-        this.texture.close();
-    }
-
-
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ) {
         RenderSystem.setShaderTexture(0, this.texture.getId());
         RenderSystem.enableBlend();
         GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.disableBlend();
+    }
+
+    @Override
+    public void close() {
+        texture.close();
     }
 
     record DataAtPosition(Holder<Biome> biomeHolder, BlockPos worldPos) {
