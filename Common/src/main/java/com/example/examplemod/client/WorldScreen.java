@@ -76,7 +76,7 @@ public class WorldScreen extends Screen {
     public WorldScreen(Component $$0) {
         super($$0);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        this.level = server.getLevel(Level.OVERWORLD);
+        this.level = server.getLevel(Level.END);
 
         for (Holder<Biome> possibleBiome : level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes()) {
             colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
@@ -88,8 +88,8 @@ public class WorldScreen extends Screen {
     }
 
     private void setWorldArea() {
-        int screenCenterX = (int) ((this.width / 2) / scale);
-        int screenCenterZ = (int) ((this.height / 2) / scale);
+        int screenCenterX = getScreenCenterX();
+        int screenCenterZ = getScreenCenterZ();
 
         int xRange = blockToTile(screenCenterX) + 1;
         int zRange = blockToTile(screenCenterZ) + 1;
@@ -118,17 +118,17 @@ public class WorldScreen extends Screen {
 
     private void handleTileTracking() {
         long originChunk = tileKey(this.origin);
-        int centerX = (int) ((this.width / 2) / scale);
-        int centerZ = (int) ((this.height / 2) / scale);
+        int centerX = getScreenCenterX();
+        int centerZ = getScreenCenterZ();
 
         int xRange = blockToTile(centerX) + 1;
         int zRange = blockToTile(centerZ) + 1;
 
         for (int x = -xRange; x <= xRange; x++) {
             for (int z = -zRange; z <= zRange; z++) {
-                int worldChunkX = getTileX(originChunk) + x;
-                int worldChunkZ = getTileZ(originChunk) + z;
-                long worldChunk = LongPackingUtil.tileKey(worldChunkX, worldChunkZ);
+                int worldTileX = getTileX(originChunk) + x;
+                int worldTileZ = getTileZ(originChunk) + z;
+                long worldChunk = LongPackingUtil.tileKey(worldTileX, worldTileZ);
                 if (submitted.add(worldChunk)) {
                     tilesToSubmit.add(worldChunk);
                 }
@@ -144,8 +144,8 @@ public class WorldScreen extends Screen {
                 this.trackedTileFutures.computeIfAbsent(tilePos, key ->
                         CompletableFuture.supplyAsync(
                                 () -> {
-                                    int worldX = tileToBlock(getTileX(key));
-                                    int worldZ = tileToBlock(getTileZ(key));
+                                    int worldX = getWorldXFromTileKey(key);
+                                    int worldZ = getWorldZFromTileKey(key);
                                     return new Tile(this.heightMap, this.origin.getY(), worldX, worldZ, this.tileSize, this.sampleResolution, this.level, this.colorForBiome);
                                 }, executorService)
                 );
@@ -155,8 +155,8 @@ public class WorldScreen extends Screen {
 
         LongList toRemove = new LongArrayList();
         this.trackedTileFutures.forEach((tilePos, future) -> {
-            int worldX = tileToBlock(getTileX(tilePos));
-            int worldZ = tileToBlock(getTileZ(tilePos));
+            int worldX = getWorldXFromTileKey(tilePos);
+            int worldZ = getWorldZFromTileKey(tilePos);
             if (this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
                 Tile tile = future.getNow(null);
                 if (tile != null) {
@@ -181,13 +181,11 @@ public class WorldScreen extends Screen {
     }
 
     private void renderTiles(PoseStack stack, int mouseX, int mouseZ) {
-        long originChunk = tileKey(this.origin);
-
         stack.pushPose();
         stack.scale(scale, scale, 0);
 
-        int screenCenterX = (int) ((this.width / 2) / scale);
-        int screenCenterZ = (int) ((this.height / 2) / scale);
+        int screenCenterX = getScreenCenterX();
+        int screenCenterZ = getScreenCenterZ();
 
         int scaledMouseX = (int) (mouseX / scale);
         int scaledMouseZ = (int) (mouseZ / scale);
@@ -198,8 +196,8 @@ public class WorldScreen extends Screen {
 
 
         for (Tile tileToRender : this.toRender) {
-            int localX = getTileX(originChunk) - blockToTile(tileToRender.getWorldX());
-            int localZ = getTileZ(originChunk) - blockToTile(tileToRender.getWorldZ());
+            int localX = getTileLocalXFromWorldX(tileToRender.getWorldX());
+            int localZ = getTileLocalZFromWorldZ(tileToRender.getWorldZ());
 
             int screenTileMinX = (screenCenterX + localX * tileSize);
             int screenTileMinZ = (screenCenterZ + localZ * tileSize);
@@ -208,7 +206,7 @@ public class WorldScreen extends Screen {
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
                 Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
 
-                toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, dataAtPosition.worldPos().getY(), worldZ));
+                toolTipFrom = new TextComponent(String.format("%s, %s, %s", dataAtPosition.worldPos().getX(), dataAtPosition.worldPos().getY(), dataAtPosition.worldPos().getZ()));
 
                 toolTipFrom.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder()));
             }
@@ -221,16 +219,18 @@ public class WorldScreen extends Screen {
 
     @Override
     public void onClose() {
-        terminateAllFutures();
+        terminateAllFutures(false);
         super.onClose();
     }
 
-    private void terminateAllFutures() {
+    private void terminateAllFutures(boolean makeNewFuture) {
         executorService.shutdown();
 
         while (!executorService.isShutdown()) {
         }
-        executorService = UtilAccess.invokeMakeExecutor("world-viewer");
+        if (makeNewFuture) {
+            executorService = UtilAccess.invokeMakeExecutor("world-viewer");
+        }
     }
 
     @NotNull
@@ -263,7 +263,9 @@ public class WorldScreen extends Screen {
             int worldX = tileToRender.getWorldX();
             int worldZ = tileToRender.getWorldZ();
             if (!this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
-                this.toRender.remove(i);
+                Tile removed = this.toRender.remove(i);
+                removed.close();
+
                 this.submitted.remove(LongPackingUtil.tileKey(blockToTile(worldX), blockToTile(worldZ)));
             }
         }
@@ -275,7 +277,7 @@ public class WorldScreen extends Screen {
             if (!this.level.isOutsideBuildHeight((int) (this.origin.getY() + delta))) {
                 this.origin.move(0, (int) delta, 0);
                 this.submitted.clear();
-                terminateAllFutures();
+                terminateAllFutures(true);
                 this.toRender.clear();
             }
         } else {
@@ -307,5 +309,33 @@ public class WorldScreen extends Screen {
 
     public int tileToBlock(int tileCoord) {
         return LongPackingUtil.tileToBlock(tileCoord, this.shift);
+    }
+
+    public int getScreenCenterX() {
+        return (int) ((this.width / 2) / scale);
+    }
+
+    public int getScreenCenterZ() {
+        return (int) ((this.height / 2) / scale);
+    }
+
+    public int getWorldXFromTileKey(long tileKey) {
+        return tileToBlock(getTileX(tileKey));
+    }
+
+    public int getWorldZFromTileKey(long tileKey) {
+        return tileToBlock(getTileZ(tileKey));
+    }
+
+    public int getTileLocalXFromWorldX(int worldX) {
+        return getTileX(getOriginChunk()) - blockToTile(worldX);
+    }
+
+    public int getTileLocalZFromWorldZ(int worldZ) {
+        return getTileZ(getOriginChunk()) - blockToTile(worldZ);
+    }
+
+    public long getOriginChunk() {
+        return tileKey(this.origin);
     }
 }
