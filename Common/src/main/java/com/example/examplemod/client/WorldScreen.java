@@ -1,6 +1,5 @@
 package com.example.examplemod.client;
 
-import com.example.examplemod.mixin.UtilAccess;
 import com.example.examplemod.mixin.client.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -26,13 +25,14 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Formatter;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
@@ -40,7 +40,7 @@ import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 public class WorldScreen extends Screen {
 
 
-    private ExecutorService executorService = UtilAccess.invokeMakeExecutor("world-viewer");
+    private ExecutorService executorService = createExecutor();
 
 
     private final Long2ObjectLinkedOpenHashMap<CompletableFuture<Tile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
@@ -72,6 +72,10 @@ public class WorldScreen extends Screen {
     public LongList tilesToSubmit = new LongArrayList();
 
     public int submittedTaskCoolDown = 0;
+
+    // String formatting
+    private final StringBuilder builder = new StringBuilder();
+    private final Formatter formatter = new Formatter();
 
     public WorldScreen(Component $$0) {
         super($$0);
@@ -192,8 +196,9 @@ public class WorldScreen extends Screen {
 
         int worldX = this.origin.getX() - (screenCenterX - scaledMouseX);
         int worldZ = this.origin.getZ() - (screenCenterZ - scaledMouseZ);
-        MutableComponent toolTipFrom = new TextComponent(String.format("%s, %s, %s", worldX, "???", worldZ));
 
+        builder.setLength(0);
+        MutableComponent xyzTooltip = new TextComponent(formatter.format("%s, %s, %s", worldX, "???", worldZ).toString());
 
         for (Tile tileToRender : this.toRender) {
             int localX = getTileLocalXFromWorldX(tileToRender.getWorldX());
@@ -206,69 +211,53 @@ public class WorldScreen extends Screen {
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
                 Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
 
-                toolTipFrom = new TextComponent(String.format("%s, %s, %s", dataAtPosition.worldPos().getX(), dataAtPosition.worldPos().getY(), dataAtPosition.worldPos().getZ()));
+                xyzTooltip = new TextComponent(String.format("%s, %s, %s", dataAtPosition.worldPos().getX(), dataAtPosition.worldPos().getY(), dataAtPosition.worldPos().getZ()));
 
-                toolTipFrom.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder()));
+                xyzTooltip.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder(), builder, formatter));
             }
         }
 
         stack.popPose();
 
-        renderTooltip(stack, toolTipFrom, mouseX, mouseZ);
+        renderTooltip(stack, xyzTooltip, mouseX, mouseZ);
     }
 
     @Override
     public void onClose() {
-        terminateAllFutures(false);
+        if (!toRender.isEmpty()) {
+            toRender.forEach(Tile::close);
+        }
+
+        executorService.shutdownNow();
+        formatter.close();
         super.onClose();
     }
 
-    private void terminateAllFutures(boolean makeNewFuture) {
-        executorService.shutdown();
 
-        while (!executorService.isShutdown()) {
-        }
-        if (makeNewFuture) {
-            executorService = UtilAccess.invokeMakeExecutor("world-viewer");
-        }
-    }
-
-    @NotNull
-    private static Component getTranslationComponent(Holder<Biome> biomeHolder) {
-        ResourceLocation location = biomeHolder.unwrapKey().orElseThrow().location();
-        String string = "biome." + location.getNamespace() + "." + location.getPath();
-
-        Component hoverText;
-        if (Language.getInstance().has(string)) {
-            hoverText = new TranslatableComponent(string);
-        } else {
-            hoverText = new TextComponent(location.toString());
-        }
-        return hoverText;
-    }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
-        removeUneseen();
+        cull();
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
-    private void removeUneseen() {
+    private void cull() {
         setWorldArea();
 
-        List<Tile> render = this.toRender;
-        for (int i = 0; i < render.size(); i++) {
-            Tile tileToRender = render.get(i);
-            int worldX = tileToRender.getWorldX();
-            int worldZ = tileToRender.getWorldZ();
-            if (!this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
-                Tile removed = this.toRender.remove(i);
-                removed.close();
+        toRender.removeIf(tile -> {
+            int x = tile.getWorldX();
+            int z = tile.getWorldZ();
 
-                this.submitted.remove(LongPackingUtil.tileKey(blockToTile(worldX), blockToTile(worldZ)));
+            if (!worldViewArea.intersects(x, z, x, z)) {
+                tile.close();
+                submitted.remove(LongPackingUtil.tileKey(blockToTile(x), blockToTile(z)));
+
+                return true;
             }
-        }
+
+            return false;
+        });
     }
 
     @Override
@@ -277,12 +266,15 @@ public class WorldScreen extends Screen {
             if (!this.level.isOutsideBuildHeight((int) (this.origin.getY() + delta))) {
                 this.origin.move(0, (int) delta, 0);
                 this.submitted.clear();
-                terminateAllFutures(true);
+
+                executorService.shutdownNow();
+                executorService = createExecutor();
+
                 this.toRender.clear();
             }
         } else {
             this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.05, 1.5);
-            removeUneseen();
+            cull();
         }
         this.scrollCooldown = 30;
         return true;
@@ -337,5 +329,22 @@ public class WorldScreen extends Screen {
 
     public long getOriginChunk() {
         return tileKey(this.origin);
+    }
+
+    private static ExecutorService createExecutor() {
+        return Executors.newFixedThreadPool(4, r -> {
+            var thread = Executors.defaultThreadFactory().newThread(r);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private static Component getTranslationComponent(Holder<Biome> holder, StringBuilder builder, Formatter formatter) {
+        ResourceLocation location = holder.unwrapKey().orElseThrow().location();
+
+        builder.setLength(0);
+        String string = formatter.format("biome.%s.%s", location.getNamespace(), location.getPath()).toString();
+
+        return Language.getInstance().has(string) ? new TranslatableComponent(string) : new TextComponent(location.toString());
     }
 }
