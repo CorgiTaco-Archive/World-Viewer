@@ -6,12 +6,15 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
@@ -22,8 +25,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
@@ -79,26 +85,33 @@ public class WorldScreen extends Screen {
     private final StringBuilder builder = new StringBuilder();
     private final Formatter formatter = new Formatter();
 
+    private boolean structuresNeedUpdates;
+
+    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new Object2ObjectOpenHashMap<>();
+
     public WorldScreen(Component $$0) {
         super($$0);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        this.level = server.getLevel(Level.END);
+        this.level = server.getLevel(Level.OVERWORLD);
 
-        for (Holder<Biome> possibleBiome : level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes()) {
+        ChunkGenerator generator = level.getChunkSource().getGenerator();
+        for (Holder<Biome> possibleBiome : generator.getBiomeSource().possibleBiomes()) {
             colorForBiome.put(possibleBiome, FastColor.ARGB32.color(255, level.random.nextInt(256), level.random.nextInt(256), level.random.nextInt(256)));
         }
 
         BlockPos playerBlockPos = Minecraft.getInstance().player.blockPosition();
         origin = new BlockPos.MutableBlockPos().set(playerBlockPos).setY(Mth.clamp(playerBlockPos.getY(), this.level.getMinBuildHeight(), this.level.getMaxBuildHeight()));
         setWorldArea();
+        this.structuresNeedUpdates = true;
     }
+
 
     private void setWorldArea() {
         int screenCenterX = getScreenCenterX();
         int screenCenterZ = getScreenCenterZ();
 
-        int xRange = blockToTile(screenCenterX) + 1;
-        int zRange = blockToTile(screenCenterZ) + 1;
+        int xRange = blockToTile(screenCenterX) + 2;
+        int zRange = blockToTile(screenCenterZ) + 2;
         this.worldViewArea = BoundingBox.fromCorners(
                 new Vec3i(
                         this.origin.getX() - tileToBlock(xRange) - 1,
@@ -118,6 +131,7 @@ public class WorldScreen extends Screen {
         this.scrollCooldown--;
         if (scrollCooldown < 0) {
             handleTileTracking();
+        } else {
         }
         super.tick();
     }
@@ -127,8 +141,8 @@ public class WorldScreen extends Screen {
         int centerX = getScreenCenterX();
         int centerZ = getScreenCenterZ();
 
-        int xRange = blockToTile(centerX) + 1;
-        int zRange = blockToTile(centerZ) + 1;
+        int xRange = blockToTile(centerX) + 2;
+        int zRange = blockToTile(centerZ) + 2;
 
         for (int x = -xRange; x <= xRange; x++) {
             for (int z = -zRange; z <= zRange; z++) {
@@ -167,6 +181,9 @@ public class WorldScreen extends Screen {
                 Tile tile = future.getNow(null);
                 if (tile != null) {
                     this.toRender.add(tile);
+                    tile.getPositionsForStructure().forEach(((configuredStructureFeatureHolder, longs) ->
+                            this.positionsForStructure.computeIfAbsent(configuredStructureFeatureHolder, key -> new LongArraySet()).addAll(longs))
+                    );
                     toRemove.add(tilePos);
                 }
             } else {
@@ -203,11 +220,11 @@ public class WorldScreen extends Screen {
         MutableComponent xyzTooltip = new TextComponent(formatter.format("%s, %s, %s", worldX, "???", worldZ).toString());
 
         for (Tile tileToRender : this.toRender) {
-            int localX = getTileLocalXFromWorldX(tileToRender.getWorldX());
-            int localZ = getTileLocalZFromWorldZ(tileToRender.getWorldZ());
+            int localX = getLocalXFromWorldX(tileToRender.getWorldX());
+            int localZ = getLocalZFromWorldZ(tileToRender.getWorldZ());
 
-            int screenTileMinX = (screenCenterX + localX * tileSize);
-            int screenTileMinZ = (screenCenterZ + localZ * tileSize);
+            int screenTileMinX = (screenCenterX + localX);
+            int screenTileMinZ = (screenCenterZ + localZ);
             tileToRender.render(stack, screenTileMinX, screenTileMinZ);
 
             if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
@@ -217,7 +234,25 @@ public class WorldScreen extends Screen {
 
                 xyzTooltip.append(" | ").append(getTranslationComponent(dataAtPosition.biomeHolder(), builder, formatter));
             }
+
         }
+
+        this.positionsForStructure.forEach(((configuredStructureFeatureHolder, longs) -> {
+            for (long structureChunkPos : longs) {
+                int structureWorldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(structureChunkPos), 7);
+                int structureWorldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(structureChunkPos), 7);
+
+                if (worldViewArea.intersects(structureWorldX, structureWorldZ, structureWorldX, structureWorldZ)) {
+                    int range = 24;
+
+                    int drawX = screenCenterX + getLocalXFromWorldX(structureWorldX);
+                    int drawZ = screenCenterZ + getLocalZFromWorldZ(structureWorldZ);
+
+                    GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, FastColor.ARGB32.color(255, 255, 255, 255));
+                }
+            }
+        }));
+
 
         stack.popPose();
 
@@ -236,7 +271,6 @@ public class WorldScreen extends Screen {
     }
 
 
-
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
@@ -250,7 +284,6 @@ public class WorldScreen extends Screen {
         toRender.removeIf(tile -> {
             int x = tile.getWorldX();
             int z = tile.getWorldZ();
-
             if (!worldViewArea.intersects(x, z, x, z)) {
                 tile.close();
                 submitted.remove(LongPackingUtil.tileKey(blockToTile(x), blockToTile(z)));
@@ -331,6 +364,14 @@ public class WorldScreen extends Screen {
 
     public long getOriginChunk() {
         return tileKey(this.origin);
+    }
+
+    public int getLocalXFromWorldX(int worldX) {
+        return this.origin.getX() - worldX;
+    }
+
+    public int getLocalZFromWorldZ(int worldZ) {
+        return this.origin.getZ() - worldZ;
     }
 
     private static ExecutorService createExecutor() {
