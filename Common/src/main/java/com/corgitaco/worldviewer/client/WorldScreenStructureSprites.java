@@ -6,16 +6,15 @@ import com.mojang.math.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import static java.util.Objects.requireNonNull;
 import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
 import static org.lwjgl.opengl.ARBDirectStateAccess.*;
 import static org.lwjgl.opengl.ARBSeparateShaderObjects.glProgramUniformMatrix4fv;
 import static org.lwjgl.opengl.GL33.*;
-import static org.lwjgl.system.rpmalloc.RPmalloc.*;
 
 // Wip Instanced rendering.
 
@@ -31,13 +30,12 @@ public final class WorldScreenStructureSprites {
     private final int projectionUniform;
     private final int modelViewUniform;
 
+    private final Texture texture = new Texture();
+
     WorldScreenStructureSprites() {
         if (!CrossPlatformHelper.CAPABILITIES.GL_ARB_draw_instanced) {
             throw new CrossPlatformHelper.UnsupportedGLExtensionException("GL_ARB_draw_instanced is required.");
         }
-
-        rpmalloc_initialize();
-        rpmalloc_thread_initialize();
 
         var buffer = createByteBuffer().flip();
 
@@ -105,10 +103,7 @@ public final class WorldScreenStructureSprites {
             glBindVertexArray(0);
         }
 
-        rpfree(buffer);
-
-        rpmalloc_thread_finalize(true);
-        rpmalloc_finalize();
+        MemoryUtil.memFree(buffer);
 
         var manager = Minecraft.getInstance().getResourceManager();
 
@@ -144,7 +139,7 @@ public final class WorldScreenStructureSprites {
 
     // Gets freed after uploaded to VBO and EBO.
     private ByteBuffer createByteBuffer() {
-        var buffer = requireNonNull(rpaligned_calloc(4, 1, (24 + 6) * 4));
+        var buffer = MemoryUtil.memCalloc((24 + 6) * 4);
         buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
         buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
         buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
@@ -207,5 +202,30 @@ public final class WorldScreenStructureSprites {
         glDeleteBuffers(ebo);
 
         glDeleteProgram(program);
+
+        texture.destroy();
+    }
+
+    private static final class Texture {
+        private static final ResourceLocation DESERT_PYRAMID = WorldViewer.createResourceLocation("textures/ico/desert_pyramid.png");
+        private static final ResourceLocation JUNGLE_PYRAMID = WorldViewer.createResourceLocation("textures/ico/jungle_pyramid.png");
+
+        private final int texture;
+
+        private Texture() {
+            if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
+                texture = glCreateTextures(GL_TEXTURE_2D_ARRAY);
+            } else {
+                texture = glGenTextures();
+
+                glActiveTexture(0);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            }
+        }
+
+        private void destroy () {
+            glDeleteTextures(texture);
+        }
     }
 }
