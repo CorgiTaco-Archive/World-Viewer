@@ -18,6 +18,8 @@ public final class CrossPlatformHelper {
 
     public static final boolean BUFFER_STORAGE = CAPABILITIES.GL_ARB_buffer_storage;
 
+    public static final boolean SEPARATE_SHADER_OBJECTS = CAPABILITIES.GL_ARB_separate_shader_objects;
+
     private CrossPlatformHelper() {
     }
 
@@ -25,8 +27,8 @@ public final class CrossPlatformHelper {
         var shader = glCreateShader(type);
 
         glShaderSource(shader, source);
-        glCompileShader(shader);
 
+        glCompileShader(shader);
         return shader;
     }
 

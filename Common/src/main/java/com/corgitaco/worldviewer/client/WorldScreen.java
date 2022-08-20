@@ -3,6 +3,7 @@ package com.corgitaco.worldviewer.client;
 import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -209,7 +210,6 @@ public final class WorldScreen extends Screen {
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
         renderTiles(stack, mouseX, mouseZ);
-        sprite.draw();
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
@@ -262,10 +262,11 @@ public final class WorldScreen extends Screen {
             }
         }));
 
+        sprite.draw(RenderSystem.getProjectionMatrix(), RenderSystem.getModelViewMatrix());
 
         stack.popPose();
 
-        renderTooltip(stack, tooltip, mouseX, mouseZ);
+        // renderTooltip(stack, tooltip, mouseX, mouseZ);
     }
 
     @Override

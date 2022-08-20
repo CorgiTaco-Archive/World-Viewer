@@ -2,15 +2,18 @@ package com.corgitaco.worldviewer.client;
 
 import com.corgitaco.worldviewer.common.WorldViewer;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.math.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryStack;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import static java.util.Objects.requireNonNull;
 import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
 import static org.lwjgl.opengl.ARBDirectStateAccess.*;
+import static org.lwjgl.opengl.ARBSeparateShaderObjects.glProgramUniformMatrix4fv;
 import static org.lwjgl.opengl.GL33.*;
 import static org.lwjgl.system.rpmalloc.RPmalloc.*;
 
@@ -25,6 +28,8 @@ public final class WorldScreenStructureSprites {
     private final int ebo;
 
     private final int program;
+    private final int projectionUniform;
+    private final int modelViewUniform;
 
     WorldScreenStructureSprites() {
         if (!CrossPlatformHelper.CAPABILITIES.GL_ARB_draw_instanced) {
@@ -34,16 +39,7 @@ public final class WorldScreenStructureSprites {
         rpmalloc_initialize();
         rpmalloc_thread_initialize();
 
-        var buffer = requireNonNull(rpaligned_calloc(4, 1, (24 + 6) * 4));
-
-        buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-        buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-        buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-        buffer.putFloat(-0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-
-        buffer.putInt(0).putInt(1).putInt(2).putInt(2).putInt(3).putInt(0);
-
-        buffer.flip();
+        var buffer = createByteBuffer().flip();
 
         var vertices = 24 * 4;
         var elements = 6 * 4;
@@ -85,17 +81,19 @@ public final class WorldScreenStructureSprites {
             glBindVertexArray(vao);
 
             buffer.limit(vertices);
-            glBindBuffer(GL_VERTEX_ARRAY, vbo = glCreateBuffers());
+            glBindBuffer(GL_ARRAY_BUFFER, vbo = glGenBuffers());
             if (CrossPlatformHelper.BUFFER_STORAGE) {
-                glBufferStorage(GL_VERTEX_ARRAY, buffer, GL_MAP_READ_BIT);
+                glBufferStorage(GL_ARRAY_BUFFER, buffer, GL_MAP_READ_BIT);
             } else {
-                glBufferData(GL_VERTEX_ARRAY, buffer, GL_STATIC_DRAW);
+                glBufferData(GL_ARRAY_BUFFER, buffer, GL_STATIC_DRAW);
             }
-            glBindBuffer(GL_VERTEX_ARRAY, 0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, false, 24, 0);
+            glVertexAttribPointer(1, 2, GL_FLOAT, false, 24, 16);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
             buffer.position(vertices);
 
             buffer.limit(vertices + elements);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo = glCreateBuffers());
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo = glGenBuffers());
             if (CrossPlatformHelper.BUFFER_STORAGE) {
                 glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_MAP_READ_BIT);
             } else {
@@ -139,13 +137,44 @@ public final class WorldScreenStructureSprites {
         glDeleteShader(vertex);
 
         glValidateProgram(program);
+
+        projectionUniform = glGetUniformLocation(program, "projection");
+        modelViewUniform = glGetUniformLocation(program, "modelView");
     }
 
-    public void draw() {
+    // Gets freed after uploaded to VBO and EBO.
+    private ByteBuffer createByteBuffer() {
+        var buffer = requireNonNull(rpaligned_calloc(4, 1, (24 + 6) * 4));
+        buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
+        buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
+        buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
+        buffer.putFloat(-0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
+
+        buffer.putInt(0).putInt(1).putInt(2).putInt(2).putInt(3).putInt(0);
+
+        return buffer;
+    }
+
+    public void draw(Matrix4f projection, Matrix4f modelView) {
         var shader = RenderSystem.getShader();
 
-        glUseProgram(0);
         glUseProgram(program);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            var buffer = stack.callocFloat(16);
+
+            if (CrossPlatformHelper.SEPARATE_SHADER_OBJECTS) {
+                projection.store(buffer);
+                glProgramUniformMatrix4fv(program, projectionUniform, false, buffer);
+                modelView.store(buffer);
+                glProgramUniformMatrix4fv(program, modelViewUniform, false, buffer);
+            } else {
+                projection.store(buffer);
+                glUniformMatrix4fv(projectionUniform, false, buffer);
+                modelView.store(buffer);
+                glUniformMatrix4fv(modelViewUniform, false, buffer);
+            }
+        }
 
         glBindVertexArray(vao);
 
@@ -168,8 +197,6 @@ public final class WorldScreenStructureSprites {
         }
 
         glBindVertexArray(0);
-
-        glUseProgram(0);
 
         glUseProgram(shader.getId());
     }
