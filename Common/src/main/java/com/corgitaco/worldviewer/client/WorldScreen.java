@@ -3,6 +3,8 @@ package com.corgitaco.worldviewer.client;
 import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -13,6 +15,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -25,6 +28,7 @@ import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
@@ -36,6 +40,8 @@ import net.minecraft.world.level.levelgen.structure.StructureSet;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Formatter;
 import java.util.Queue;
 import java.util.Set;
@@ -116,6 +122,13 @@ public final class WorldScreen extends Screen {
             map.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
         });
 
+        computeStructureRenderers();
+
+        biomeColors = Object2IntMaps.unmodifiable(map);
+    }
+
+    private void computeStructureRenderers() {
+        var random = level.random;
         level.getChunkSource().getGenerator().possibleStructureSets().map(Holder::value).map(StructureSet::structures).forEach(structureSelectionEntries -> {
             for (StructureSet.StructureSelectionEntry structureSelectionEntry : structureSelectionEntries) {
                 Holder<ConfiguredStructureFeature<?, ?>> structure = structureSelectionEntry.structure();
@@ -124,14 +137,44 @@ public final class WorldScreen extends Screen {
                 var b = Mth.randomBetweenInclusive(random, 150, 256);
                 int color = FastColor.ARGB32.color(255, r, g, b);
 
-                structureRendering.putIfAbsent(structure, (stack, drawX, drawZ) -> {
-                    int range = 16;
-                    GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
-                });
+                ResourceLocation location = structure.unwrapKey().orElseThrow().location();
+
+                if (!structureRendering.containsKey(structure)) {
+                    StructureRender structureRender;
+                    ResourceManager resourceManager = Minecraft.getInstance().getResourceManager();
+                    ResourceLocation resourceLocation = new ResourceLocation(location.getNamespace(), "worldview/icon/structure/" + location.getPath() + ".png");
+
+                    if (resourceManager.hasResource(resourceLocation)) {
+                        try {
+                            InputStream inputStream = resourceManager.getResource(resourceLocation).getInputStream();
+                            NativeImage read = NativeImage.read(inputStream);
+                            DynamicTexture dynamicTexture = new DynamicTexture(read);
+                            structureRender = (stack, drawX, drawZ) -> {
+                                RenderSystem.setShaderTexture(0, dynamicTexture.getId());
+                                RenderSystem.enableBlend();
+                                int width = (int) (read.getWidth() / scale);
+                                int height = (int) (read.getHeight() / scale);
+                                GuiComponent.blit(stack, drawX - (width / 2), drawZ - (width / 2), 0.0F, 0.0F, width, height, width, height);
+                                RenderSystem.disableBlend();
+                            };
+
+
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+
+
+                    } else {
+                        structureRender = (stack, drawX, drawZ) -> {
+                            int range = 16;
+                            GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
+                        };
+                    }
+
+                    this.structureRendering.put(structure, structureRender);
+                }
             }
         });
-
-        biomeColors = Object2IntMaps.unmodifiable(map);
     }
 
 
@@ -276,7 +319,7 @@ public final class WorldScreen extends Screen {
 
         stack.popPose();
 
-//        renderTooltip(stack, tooltip, mouseX, mouseZ);
+        renderTooltip(stack, tooltip, mouseX, mouseZ);
     }
 
     @Override
