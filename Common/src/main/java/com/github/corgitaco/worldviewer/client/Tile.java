@@ -1,4 +1,4 @@
-package com.example.examplemod.client;
+package com.github.corgitaco.worldviewer.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;

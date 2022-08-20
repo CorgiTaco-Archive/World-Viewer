@@ -1,10 +1,8 @@
-package com.example.examplemod.client;
+package com.github.corgitaco.worldviewer.client;
 
 import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import it.unimi.dsi.fastutil.objects.Object2IntMaps;
-import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectLongPair;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
@@ -21,51 +19,31 @@ import java.util.concurrent.*;
 public final class WorldScreenThreadSafety {
     private static final long UNSIGNED_INT_BIT_MASK = 0xFFFFFFFF;
 
-    private static final int BIT_MASK = 0xFF;
-
     // Concurrent - Non-blocking.
     private final Queue<ObjectLongPair<CompletableFuture<Tile>>> pairs = new ConcurrentLinkedQueue<>();
 
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> map = new ConcurrentHashMap<>();
 
-    // Blocking.
-    private final Object2IntMap<Holder<Biome>> colors = Object2IntMaps.synchronize(new Object2IntOpenHashMap<>());
-
     private ExecutorService service = createExecutorService();
 
-    WorldScreenThreadSafety(ServerLevel level) {
-
-        level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().parallelStream().forEach(holder -> {
-            var random = ThreadLocalRandom.current();
-
-            var r = random.nextInt(256);
-            var g = random.nextInt(256);
-            var b = random.nextInt(256);
-
-            colors.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
-        });
+    WorldScreenThreadSafety() {
     }
 
     // Deprecated Methods.
 
     @Deprecated
-    public void computeLazily(boolean useHeightmap, int y, int size, int resolution, ServerLevel level, int bitShift, long l) {
-        pairs.offer(ObjectLongPair.of(CompletableFuture.supplyAsync(() -> {
-            var x = getX(l, bitShift);
-            var z = getZ(l, bitShift);
-
-            return new Tile(useHeightmap, y, x, z, size, resolution, level, colors);
-        }, service), l));
+    public void computeLazily(boolean useHeightmap, int y, int size, int resolution, ServerLevel level, int bitShift, long l, Object2IntMap<Holder<Biome>> colors) {
+        pairs.offer(ObjectLongPair.of(createCompletableFuture(useHeightmap, y, size, resolution, level, bitShift, l, colors), l));
     }
 
     @Deprecated
-    public CompletableFuture<Tile> createCompletableFuture(boolean useHeightmap, int y, int size, int resolution, ServerLevel level, int bitShift, long l) {
+    public CompletableFuture<Tile> createCompletableFuture(boolean useHeightmap, int y, int size, int resolution, ServerLevel level, int bitShift, long l, Object2IntMap<Holder<Biome>> colors) {
         return CompletableFuture.supplyAsync(() -> {
             var x = getX(l, bitShift);
             var z = getZ(l, bitShift);
 
             return new Tile(useHeightmap, y, x, z, size, resolution, level, colors);
-        });
+        }, service);
     }
 
     @Deprecated

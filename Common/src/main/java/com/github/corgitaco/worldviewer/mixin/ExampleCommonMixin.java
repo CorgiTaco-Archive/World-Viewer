@@ -1,4 +1,4 @@
-package com.example.examplemod.mixin;
+package com.github.corgitaco.worldviewer.mixin;
 
 import com.example.examplemod.Constants;
 import net.minecraft.SharedConstants;

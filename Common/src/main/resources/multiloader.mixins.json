@@ -4,12 +4,12 @@
   "package": "com.example.examplemod.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "UtilAccess"
+    "com.github.corgitaco.worldviewer.mixin.UtilAccess"
   ],
   "client": [
-    "ExampleCommonMixin",
-    "client.KeyMappingAccess",
-    "client.MixinOptionsScreen"
+    "com.github.corgitaco.worldviewer.mixin.ExampleCommonMixin",
+    "com.github.corgitaco.worldviewer.mixin.KeyMappingAccess",
+    "com.github.corgitaco.worldviewer.mixin.MixinOptionsScreen"
   ],
   "server": [
   ],

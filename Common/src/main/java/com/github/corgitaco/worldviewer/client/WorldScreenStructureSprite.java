@@ -1,4 +1,4 @@
-package com.example.examplemod.client;
+package com.github.corgitaco.worldviewer.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.lwjgl.opengl.GL;
@@ -6,6 +6,7 @@ import org.lwjgl.opengl.GLCapabilities;
 import org.lwjgl.system.MemoryStack;
 
 import static java.util.Objects.requireNonNull;
+import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
 import static org.lwjgl.opengl.ARBDirectStateAccess.*;
 import static org.lwjgl.opengl.GL33.*;
 import static org.lwjgl.system.rpmalloc.RPmalloc.*;
@@ -16,6 +17,8 @@ public final class WorldScreenStructureSprite {
     private static final GLCapabilities CAPABILITIES = GL.getCapabilities();
 
     private static final boolean DIRECT_STATE_ACCESS = CAPABILITIES.GL_ARB_direct_state_access;
+
+    private static final boolean BUFFER_STORAGE = CAPABILITIES.GL_ARB_buffer_storage;
 
     private final int vao;
     private final int vbo;
@@ -79,20 +82,33 @@ public final class WorldScreenStructureSprite {
 
             glBindVertexArray(vao);
 
-            vbo = glCreateBuffers();
-            glBindBuffer(GL_VERTEX_ARRAY, vbo);
-            glBufferData(GL_VERTEX_ARRAY, buffer, GL_STATIC_DRAW);
+            buffer.limit(vertices);
+            glBindBuffer(GL_VERTEX_ARRAY, vbo = glCreateBuffers());
+            if (BUFFER_STORAGE) {
+                glBufferStorage(GL_VERTEX_ARRAY, buffer, GL_MAP_READ_BIT);
+            } else {
+                glBufferData(GL_VERTEX_ARRAY, buffer, GL_STATIC_DRAW);
+            }
             glBindBuffer(GL_VERTEX_ARRAY, 0);
+            buffer.position(vertices);
 
-            ebo = glCreateBuffers();
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_STATIC_DRAW);
+            buffer.limit(vertices + elements);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo = glCreateBuffers());
+            if (BUFFER_STORAGE) {
+                glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_MAP_READ_BIT);
+            } else {
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_STATIC_DRAW);
+            }
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+            buffer.position(0);
 
             glBindVertexArray(0);
         }
 
         rpfree(buffer);
+
+        rpmalloc_thread_finalize(true);
+        rpmalloc_finalize();
     }
 
     public void draw() {
@@ -129,9 +145,6 @@ public final class WorldScreenStructureSprite {
         glDeleteVertexArrays(vao);
         glDeleteBuffers(vbo);
         glDeleteBuffers(ebo);
-
-        rpmalloc_thread_finalize(true);
-        rpmalloc_finalize();
     }
 
     private static final class UnsupportedGLExtensionException extends RuntimeException {

@@ -1,10 +1,13 @@
-package com.example.examplemod.client;
+package com.github.corgitaco.worldviewer.client;
 
-import com.example.examplemod.mixin.client.KeyMappingAccess;
+import com.github.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import it.unimi.dsi.fastutil.objects.Object2IntMaps;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -40,7 +43,8 @@ import java.util.concurrent.*;
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
-public class WorldScreen extends Screen {
+public final class WorldScreen extends Screen {
+    private static final int BIT_MASK = 0xFF;
 
     private ExecutorService executorService = createExecutor();
 
@@ -74,17 +78,19 @@ public class WorldScreen extends Screen {
 
     public int submittedTaskCoolDown = 0;
 
-    private final StringBuilder builder = new StringBuilder();
-
-    private final Formatter formatter = new Formatter(builder);
-
     private boolean structuresNeedUpdates;
 
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new ConcurrentHashMap<>();
 
-    // Wip.
+    // Wip. And New
     private final WorldScreenStructureSprite sprite = new WorldScreenStructureSprite();
-    private final WorldScreenThreadSafety threadSafety;
+    private final WorldScreenThreadSafety threadSafety = new WorldScreenThreadSafety();
+
+    private final StringBuilder builder = new StringBuilder();
+
+    private final Formatter formatter = new Formatter(builder);
+
+    private final Object2IntMap<Holder<Biome>> colors;
 
     public WorldScreen(Component $$0) {
         super($$0);
@@ -96,7 +102,20 @@ public class WorldScreen extends Screen {
         setWorldArea();
         this.structuresNeedUpdates = true;
 
-        threadSafety = new WorldScreenThreadSafety(level);
+        // Colors.
+        var map = new Object2IntOpenHashMap<Holder<Biome>>();
+
+        level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
+            var random = level.random;
+
+            var r = random.nextInt(256);
+            var g = random.nextInt(256);
+            var b = random.nextInt(256);
+
+            map.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
+        });
+
+        colors = Object2IntMaps.unmodifiable(map);
     }
 
 
@@ -156,7 +175,7 @@ public class WorldScreen extends Screen {
 
             for (long tilePos : tilePositions) {
                 this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key);
+                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key, colors);
                 });
             }
             this.tilesToSubmit.removeElements(0, to);
