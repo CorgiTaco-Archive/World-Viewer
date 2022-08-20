@@ -1,8 +1,6 @@
-package com.github.corgitaco.worldviewer.client;
+package com.corgitaco.worldviewer.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import org.lwjgl.opengl.GL;
-import org.lwjgl.opengl.GLCapabilities;
 import org.lwjgl.system.MemoryStack;
 
 import static java.util.Objects.requireNonNull;
@@ -13,20 +11,14 @@ import static org.lwjgl.system.rpmalloc.RPmalloc.*;
 
 // Wip Instanced rendering.
 
-public final class WorldScreenStructureSprite {
-    private static final GLCapabilities CAPABILITIES = GL.getCapabilities();
-
-    private static final boolean DIRECT_STATE_ACCESS = CAPABILITIES.GL_ARB_direct_state_access;
-
-    private static final boolean BUFFER_STORAGE = CAPABILITIES.GL_ARB_buffer_storage;
-
+public final class WorldScreenStructureSprites {
     private final int vao;
     private final int vbo;
     private final int ebo;
 
-    WorldScreenStructureSprite() {
-        if (!CAPABILITIES.GL_ARB_draw_instanced) {
-            throw new UnsupportedGLExtensionException("GL_ARB_draw_instanced is required.");
+    WorldScreenStructureSprites() {
+        if (!CrossPlatform.CAPABILITIES.GL_ARB_draw_instanced) {
+            throw new CrossPlatform.UnsupportedGLExtensionException("GL_ARB_draw_instanced is required.");
         }
 
         rpmalloc_initialize();
@@ -46,7 +38,7 @@ public final class WorldScreenStructureSprite {
         var vertices = 24 * 4;
         var elements = 6 * 4;
 
-        if (DIRECT_STATE_ACCESS) {
+        if (CrossPlatform.DIRECT_STATE_ACCESS) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 var buffers = stack.callocInt(2);
 
@@ -84,7 +76,7 @@ public final class WorldScreenStructureSprite {
 
             buffer.limit(vertices);
             glBindBuffer(GL_VERTEX_ARRAY, vbo = glCreateBuffers());
-            if (BUFFER_STORAGE) {
+            if (CrossPlatform.BUFFER_STORAGE) {
                 glBufferStorage(GL_VERTEX_ARRAY, buffer, GL_MAP_READ_BIT);
             } else {
                 glBufferData(GL_VERTEX_ARRAY, buffer, GL_STATIC_DRAW);
@@ -94,7 +86,7 @@ public final class WorldScreenStructureSprite {
 
             buffer.limit(vertices + elements);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo = glCreateBuffers());
-            if (BUFFER_STORAGE) {
+            if (CrossPlatform.BUFFER_STORAGE) {
                 glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_MAP_READ_BIT);
             } else {
                 glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_STATIC_DRAW);
@@ -118,7 +110,7 @@ public final class WorldScreenStructureSprite {
 
         glBindVertexArray(vao);
 
-        if (DIRECT_STATE_ACCESS) {
+        if (CrossPlatform.DIRECT_STATE_ACCESS) {
             glEnableVertexArrayAttrib(vao, 0);
             glEnableVertexArrayAttrib(vao, 1);
         } else {
@@ -128,7 +120,7 @@ public final class WorldScreenStructureSprite {
 
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 1);
 
-        if (DIRECT_STATE_ACCESS) {
+        if (CrossPlatform.DIRECT_STATE_ACCESS) {
             glDisableVertexArrayAttrib(vao, 0);
             glDisableVertexArrayAttrib(vao, 1);
         } else {
@@ -145,12 +137,5 @@ public final class WorldScreenStructureSprite {
         glDeleteVertexArrays(vao);
         glDeleteBuffers(vbo);
         glDeleteBuffers(ebo);
-    }
-
-    private static final class UnsupportedGLExtensionException extends RuntimeException {
-
-        private UnsupportedGLExtensionException(String reason) {
-            super(reason);
-        }
     }
 }

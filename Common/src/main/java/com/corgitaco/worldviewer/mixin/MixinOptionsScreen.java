@@ -1,6 +1,6 @@
-package com.github.corgitaco.worldviewer.mixin;
+package com.corgitaco.worldviewer.mixin;
 
-import com.github.corgitaco.worldviewer.client.WorldScreen;
+import com.corgitaco.worldviewer.client.WorldScreen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.OptionsScreen;
 import net.minecraft.client.gui.screens.Screen;

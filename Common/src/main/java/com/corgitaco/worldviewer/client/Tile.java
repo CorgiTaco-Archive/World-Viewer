@@ -1,4 +1,4 @@
-package com.github.corgitaco.worldviewer.client;
+package com.corgitaco.worldviewer.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;

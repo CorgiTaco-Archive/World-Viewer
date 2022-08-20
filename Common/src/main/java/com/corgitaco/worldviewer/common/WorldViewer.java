@@ -1,4 +1,4 @@
-package com.github.corgitaco.worldviewer.common;
+package com.corgitaco.worldviewer.common;
 
 import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;

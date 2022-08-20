@@ -1,6 +1,6 @@
-package com.github.corgitaco.worldviewer.client;
+package com.corgitaco.worldviewer.client;
 
-import com.github.corgitaco.worldviewer.mixin.KeyMappingAccess;
+import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -83,7 +83,7 @@ public final class WorldScreen extends Screen {
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new ConcurrentHashMap<>();
 
     // Wip. And New
-    private final WorldScreenStructureSprite sprite = new WorldScreenStructureSprite();
+    private final WorldScreenStructureSprites sprite = new WorldScreenStructureSprites();
     private final WorldScreenThreadSafety threadSafety = new WorldScreenThreadSafety();
 
     private final StringBuilder builder = new StringBuilder();

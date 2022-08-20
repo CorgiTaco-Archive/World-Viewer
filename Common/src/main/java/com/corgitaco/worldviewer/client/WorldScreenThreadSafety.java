@@ -1,4 +1,4 @@
-package com.github.corgitaco.worldviewer.client;
+package com.corgitaco.worldviewer.client;
 
 import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongSet;

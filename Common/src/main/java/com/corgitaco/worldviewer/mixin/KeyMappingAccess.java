@@ -1,4 +1,4 @@
-package com.github.corgitaco.worldviewer.mixin;
+package com.corgitaco.worldviewer.mixin;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;

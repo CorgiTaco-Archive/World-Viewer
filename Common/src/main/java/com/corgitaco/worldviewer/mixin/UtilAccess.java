@@ -1,4 +1,4 @@
-package com.github.corgitaco.worldviewer.mixin;
+package com.corgitaco.worldviewer.mixin;
 
 import net.minecraft.Util;
 import org.spongepowered.asm.mixin.Mixin;
