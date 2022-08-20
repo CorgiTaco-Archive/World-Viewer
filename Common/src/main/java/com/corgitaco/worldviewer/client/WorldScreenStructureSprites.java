@@ -1,7 +1,12 @@
 package com.corgitaco.worldviewer.client;
 
+import com.corgitaco.worldviewer.common.WorldViewer;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.system.MemoryStack;
+
+import java.io.IOException;
 
 import static java.util.Objects.requireNonNull;
 import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
@@ -12,13 +17,18 @@ import static org.lwjgl.system.rpmalloc.RPmalloc.*;
 // Wip Instanced rendering.
 
 public final class WorldScreenStructureSprites {
+    private static final ResourceLocation FRAGMENT_PROGRAM_SOURCE = WorldViewer.createResourceLocation("shaders/structure_sprites/fragment.glsl");
+    private static final ResourceLocation VERTEX_PROGRAM_SOURCE = WorldViewer.createResourceLocation("shaders/structure_sprites/vertex.glsl");
+
     private final int vao;
     private final int vbo;
     private final int ebo;
 
+    private final int program;
+
     WorldScreenStructureSprites() {
-        if (!CrossPlatform.CAPABILITIES.GL_ARB_draw_instanced) {
-            throw new CrossPlatform.UnsupportedGLExtensionException("GL_ARB_draw_instanced is required.");
+        if (!CrossPlatformHelper.CAPABILITIES.GL_ARB_draw_instanced) {
+            throw new CrossPlatformHelper.UnsupportedGLExtensionException("GL_ARB_draw_instanced is required.");
         }
 
         rpmalloc_initialize();
@@ -38,7 +48,7 @@ public final class WorldScreenStructureSprites {
         var vertices = 24 * 4;
         var elements = 6 * 4;
 
-        if (CrossPlatform.DIRECT_STATE_ACCESS) {
+        if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 var buffers = stack.callocInt(2);
 
@@ -76,7 +86,7 @@ public final class WorldScreenStructureSprites {
 
             buffer.limit(vertices);
             glBindBuffer(GL_VERTEX_ARRAY, vbo = glCreateBuffers());
-            if (CrossPlatform.BUFFER_STORAGE) {
+            if (CrossPlatformHelper.BUFFER_STORAGE) {
                 glBufferStorage(GL_VERTEX_ARRAY, buffer, GL_MAP_READ_BIT);
             } else {
                 glBufferData(GL_VERTEX_ARRAY, buffer, GL_STATIC_DRAW);
@@ -86,7 +96,7 @@ public final class WorldScreenStructureSprites {
 
             buffer.limit(vertices + elements);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo = glCreateBuffers());
-            if (CrossPlatform.BUFFER_STORAGE) {
+            if (CrossPlatformHelper.BUFFER_STORAGE) {
                 glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_MAP_READ_BIT);
             } else {
                 glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer, GL_STATIC_DRAW);
@@ -101,16 +111,45 @@ public final class WorldScreenStructureSprites {
 
         rpmalloc_thread_finalize(true);
         rpmalloc_finalize();
+
+        var manager = Minecraft.getInstance().getResourceManager();
+
+        String fragmentSource = "";
+        String vertexFragment = "";
+        try {
+            fragmentSource = CrossPlatformHelper.read(manager.getResource(FRAGMENT_PROGRAM_SOURCE).getInputStream());
+            vertexFragment = CrossPlatformHelper.read(manager.getResource(VERTEX_PROGRAM_SOURCE).getInputStream());
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        program = glCreateProgram();
+
+        var fragment = CrossPlatformHelper.createShader(GL_FRAGMENT_SHADER, fragmentSource);
+        var vertex = CrossPlatformHelper.createShader(GL_VERTEX_SHADER, vertexFragment);
+
+        glAttachShader(program, fragment);
+        glAttachShader(program, vertex);
+        glLinkProgram(program);
+        glDetachShader(program, fragment);
+        glDetachShader(program, vertex);
+
+        glDeleteShader(fragment);
+        glDeleteShader(vertex);
+
+        glValidateProgram(program);
     }
 
     public void draw() {
         var shader = RenderSystem.getShader();
 
         glUseProgram(0);
+        glUseProgram(program);
 
         glBindVertexArray(vao);
 
-        if (CrossPlatform.DIRECT_STATE_ACCESS) {
+        if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
             glEnableVertexArrayAttrib(vao, 0);
             glEnableVertexArrayAttrib(vao, 1);
         } else {
@@ -120,7 +159,7 @@ public final class WorldScreenStructureSprites {
 
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 1);
 
-        if (CrossPlatform.DIRECT_STATE_ACCESS) {
+        if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
             glDisableVertexArrayAttrib(vao, 0);
             glDisableVertexArrayAttrib(vao, 1);
         } else {
@@ -130,6 +169,8 @@ public final class WorldScreenStructureSprites {
 
         glBindVertexArray(0);
 
+        glUseProgram(0);
+
         glUseProgram(shader.getId());
     }
 
@@ -137,5 +178,7 @@ public final class WorldScreenStructureSprites {
         glDeleteVertexArrays(vao);
         glDeleteBuffers(vbo);
         glDeleteBuffers(ebo);
+
+        glDeleteProgram(program);
     }
 }
