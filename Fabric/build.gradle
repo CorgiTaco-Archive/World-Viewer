@@ -67,7 +67,7 @@ loom {
 
 
 processResources {
-    from project(":Common").sourceSets.main.resources
+//    from project(":Common").sourceSets.main.resources
     inputs.property "version", project.version
 
     filesMatching("fabric.mod.json") {
@@ -112,4 +112,17 @@ publishing {
 
 remapJar {
     input.set shadowJar.archiveFile
+}
+
+sourceSets {
+    main {
+        java {
+//            srcDir 'src/main/java'
+            srcDirs project(':Common').sourceSets.main.java.srcDirs
+        }
+        resources {
+//            srcDir 'src/main/resources'
+            srcDirs project(':Common').sourceSets.main.resources.srcDirs
+        }
+    }
 }

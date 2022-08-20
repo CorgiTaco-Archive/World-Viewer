@@ -3,12 +3,12 @@ package com.corgitaco.worldviewer.client;
 import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMaps;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -32,11 +32,11 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
 import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.Formatter;
-import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -81,7 +81,6 @@ public final class WorldScreen extends Screen {
 
     private boolean structuresNeedUpdates;
 
-    private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = new ConcurrentHashMap<>();
 
     // Wip. And New
     private final WorldScreenStructureSprites sprite = new WorldScreenStructureSprites();
@@ -91,7 +90,8 @@ public final class WorldScreen extends Screen {
 
     private final Formatter formatter = new Formatter(builder);
 
-    private final Object2IntMap<Holder<Biome>> colors;
+    private final Object2IntMap<Holder<Biome>> biomeColors;
+    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
     public WorldScreen(Component $$0) {
         super($$0);
@@ -105,18 +105,33 @@ public final class WorldScreen extends Screen {
 
         // Colors.
         var map = new Object2IntOpenHashMap<Holder<Biome>>();
+        var random = level.random;
 
         level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
-            var random = level.random;
 
-            var r = random.nextInt(256);
-            var g = random.nextInt(256);
-            var b = random.nextInt(256);
+            var r = Mth.randomBetweenInclusive(random, 5, 100);
+            var g = Mth.randomBetweenInclusive(random, 5, 100);
+            var b = Mth.randomBetweenInclusive(random, 5, 100);
 
             map.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
         });
 
-        colors = Object2IntMaps.unmodifiable(map);
+        level.getChunkSource().getGenerator().possibleStructureSets().map(Holder::value).map(StructureSet::structures).forEach(structureSelectionEntries -> {
+            for (StructureSet.StructureSelectionEntry structureSelectionEntry : structureSelectionEntries) {
+                Holder<ConfiguredStructureFeature<?, ?>> structure = structureSelectionEntry.structure();
+                var r = Mth.randomBetweenInclusive(random, 150, 256);
+                var g = Mth.randomBetweenInclusive(random, 150, 256);
+                var b = Mth.randomBetweenInclusive(random, 150, 256);
+                int color = FastColor.ARGB32.color(255, r, g, b);
+
+                structureRendering.putIfAbsent(structure, (stack, drawX, drawZ) -> {
+                    int range = 16;
+                    GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
+                });
+            }
+        });
+
+        biomeColors = Object2IntMaps.unmodifiable(map);
     }
 
 
@@ -176,7 +191,7 @@ public final class WorldScreen extends Screen {
 
             for (long tilePos : tilePositions) {
                 this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key, colors);
+                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key, biomeColors);
                 });
             }
             this.tilesToSubmit.removeElements(0, to);
@@ -189,11 +204,6 @@ public final class WorldScreen extends Screen {
             if (this.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
                 future.thenAcceptAsync(tile -> {
                     toRender.add(tile);
-
-                    tile.getPositionsForStructure().forEach((holder, longs) -> {
-                        positionsForStructure.computeIfAbsent(holder, key -> new LongArraySet()).addAll(longs);
-                    });
-
                     toRemove.add(tilePos);
                 }, executorService);
 
@@ -209,11 +219,11 @@ public final class WorldScreen extends Screen {
 
     @Override
     public void render(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
-        renderTiles(stack, mouseX, mouseZ);
+        renderTiles(stack, mouseX, mouseZ, partialTicks);
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
-    private void renderTiles(PoseStack stack, int mouseX, int mouseZ) {
+    private void renderTiles(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
         stack.pushPose();
         stack.scale(scale, scale, 0);
 
@@ -244,29 +254,29 @@ public final class WorldScreen extends Screen {
                 var pos = dataAtPosition.worldPos();
                 tooltip = new TextComponent(formatter.format("%s, %s, %s | ", pos.getX(), pos.getY(), pos.getZ()).toString()).append(getTranslationComponent(dataAtPosition.biomeHolder(), builder, formatter));
             }
+
+        }
+        for (Tile tileToRender : this.toRender) {
+            tileToRender.getPositionsForStructure().forEach(((configuredStructureFeatureHolder, longs) -> {
+                for (long structureChunkPos : longs) {
+                    int structureWorldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(structureChunkPos), 7);
+                    int structureWorldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(structureChunkPos), 7);
+
+                    if (worldViewArea.intersects(structureWorldX, structureWorldZ, structureWorldX, structureWorldZ)) {
+                        int drawX = screenCenterX + getLocalXFromWorldX(structureWorldX);
+                        int drawZ = screenCenterZ + getLocalZFromWorldZ(structureWorldZ);
+
+                        this.structureRendering.get(configuredStructureFeatureHolder).render(stack, drawX, drawZ);
+                    }
+                }
+            }));
         }
 
-        this.positionsForStructure.forEach(((configuredStructureFeatureHolder, longs) -> {
-            for (long structureChunkPos : longs) {
-                int structureWorldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(structureChunkPos), 7);
-                int structureWorldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(structureChunkPos), 7);
-
-                if (worldViewArea.intersects(structureWorldX, structureWorldZ, structureWorldX, structureWorldZ)) {
-                    int range = 24;
-
-                    int drawX = screenCenterX + getLocalXFromWorldX(structureWorldX);
-                    int drawZ = screenCenterZ + getLocalZFromWorldZ(structureWorldZ);
-
-                    GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, FastColor.ARGB32.color(255, 255, 255, 255));
-                }
-            }
-        }));
-
-        sprite.draw(RenderSystem.getProjectionMatrix(), RenderSystem.getModelViewMatrix());
+//        sprite.draw(RenderSystem.getProjectionMatrix(), RenderSystem.getModelViewMatrix());
 
         stack.popPose();
 
-        // renderTooltip(stack, tooltip, mouseX, mouseZ);
+//        renderTooltip(stack, tooltip, mouseX, mouseZ);
     }
 
     @Override
@@ -410,5 +420,11 @@ public final class WorldScreen extends Screen {
         String string = formatter.format("biome.%s.%s", location.getNamespace(), location.getPath()).toString();
 
         return Language.getInstance().has(string) ? new TranslatableComponent(string) : new TextComponent(location.toString());
+    }
+
+    @FunctionalInterface
+    public interface StructureRender {
+
+        void render(PoseStack stack, int scaledX, int scaledZ);
     }
 }

@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
@@ -77,11 +76,15 @@ public final class Tile implements AutoCloseable {
 
         texture = new DynamicTexture(pixel);
 
+        computeStructurePositions(worldX, worldZ, size, level, generator);
+    }
+
+    private void computeStructurePositions(int worldX, int worldZ, int size, ServerLevel level, ChunkGenerator generator) {
         for (Holder<StructureSet> structureSetHolder : level.registryAccess().registryOrThrow(Registry.STRUCTURE_SET_REGISTRY).asHolderIdMap()) {
             StructureSet structureSet = structureSetHolder.value();
 
-            for (int x = SectionPos.blockToSectionCoord(worldX); x <= SectionPos.blockToSectionCoord(worldX + size - 1); x++) {
-                for (int z = SectionPos.blockToSectionCoord(worldZ); z <= SectionPos.blockToSectionCoord(worldZ + size - 1); z++) {
+            for (int x = SectionPos.blockToSectionCoord(worldX + 1); x <= SectionPos.blockToSectionCoord(worldX + size - 1); x++) {
+                for (int z = SectionPos.blockToSectionCoord(worldZ + 1); z <= SectionPos.blockToSectionCoord(worldZ + size - 1); z++) {
                     if (structureSet.placement().isFeatureChunk(generator, level.getSeed(), x, z)) {
                         WorldgenRandom worldgenrandom = new WorldgenRandom(new LegacyRandomSource(0L));
                         worldgenrandom.setLargeFeatureSeed(level.getSeed(), x, z);
