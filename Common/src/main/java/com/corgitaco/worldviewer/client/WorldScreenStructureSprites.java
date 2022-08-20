@@ -177,6 +177,8 @@ public final class WorldScreenStructureSprites {
             glEnableVertexArrayAttrib(vao, 0);
             glEnableVertexArrayAttrib(vao, 1);
         } else {
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+
             glEnableVertexAttribArray(0);
             glEnableVertexAttribArray(1);
         }
@@ -189,6 +191,8 @@ public final class WorldScreenStructureSprites {
         } else {
             glDisableVertexAttribArray(0);
             glDisableVertexAttribArray(1);
+
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         }
 
         glBindVertexArray(0);
@@ -215,11 +219,18 @@ public final class WorldScreenStructureSprites {
         private Texture() {
             if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
                 texture = glCreateTextures(GL_TEXTURE_2D_ARRAY);
+
+                glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
             } else {
                 texture = glGenTextures();
 
                 glActiveTexture(0);
                 glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
+
+                glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+
                 glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             }
         }
