@@ -1,10 +1,13 @@
 package com.corgitaco.worldviewer.client;
 
 import com.corgitaco.worldviewer.common.WorldViewer;
+import com.corgitaco.worldviewer.mixin.NativeImageAccessor;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -15,6 +18,7 @@ import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
 import static org.lwjgl.opengl.ARBDirectStateAccess.*;
 import static org.lwjgl.opengl.ARBSeparateShaderObjects.glProgramUniformMatrix4fv;
 import static org.lwjgl.opengl.GL33.*;
+import static org.lwjgl.system.MemoryUtil.NULL;
 
 // Wip Instanced rendering.
 
@@ -140,9 +144,9 @@ public final class WorldScreenStructureSprites {
     // Gets freed after uploaded to VBO and EBO.
     private ByteBuffer createByteBuffer() {
         var buffer = MemoryUtil.memCalloc((24 + 6) * 4);
-        buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-        buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
-        buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
+        buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(1.0F);
+        buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(1.0F).putFloat(1.0F);
+        buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(1.0F).putFloat(0.0F);
         buffer.putFloat(-0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F).putFloat(0.0F).putFloat(0.0F);
 
         buffer.putInt(0).putInt(1).putInt(2).putInt(2).putInt(3).putInt(0);
@@ -211,17 +215,30 @@ public final class WorldScreenStructureSprites {
     }
 
     private static final class Texture {
-        private static final ResourceLocation DESERT_PYRAMID = WorldViewer.createResourceLocation("textures/ico/desert_pyramid.png");
-        private static final ResourceLocation JUNGLE_PYRAMID = WorldViewer.createResourceLocation("textures/ico/jungle_pyramid.png");
+        private static final ResourceLocation DESERT_PYRAMID = new ResourceLocation("worldview/icon/structure/desert_pyramid.png");
+        private static final ResourceLocation JUNGLE_PYRAMID = new ResourceLocation("worldview/icon/structure/jungle_pyramid.png");
 
         private final int texture;
 
         private Texture() {
+            var manager = Minecraft.getInstance().getResourceManager();
+
             if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
                 texture = glCreateTextures(GL_TEXTURE_2D_ARRAY);
 
                 glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+
+                glTextureStorage3D(texture, 1, GL_RGBA8, 24, 24, 2);
+
+                try {
+                    uploadDirectStateAccess(texture, 0, manager, DESERT_PYRAMID);
+                    uploadDirectStateAccess(texture, 1, manager, JUNGLE_PYRAMID);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                glBindTextureUnit(0, texture);
             } else {
                 texture = glGenTextures();
 
@@ -231,12 +248,33 @@ public final class WorldScreenStructureSprites {
                 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
 
+                glTexImage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, 24, 24, 2, 0, GL_RGBA8, GL_UNSIGNED_INT, NULL);
+
+                try {
+                    upload(0, manager, DESERT_PYRAMID);
+                    upload(1, manager, JUNGLE_PYRAMID);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
                 glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             }
         }
 
         private void destroy () {
             glDeleteTextures(texture);
+        }
+
+        private static void uploadDirectStateAccess(int texture, int i, ResourceManager manager, ResourceLocation resourceLocation) throws IOException {
+            try (NativeImage image = NativeImage.read(manager.getResource(resourceLocation).getInputStream())) {
+                glTextureSubImage3D(texture, 0, 0, 0, 0, image.getWidth(), image.getHeight(), i, GL_RGBA, GL_UNSIGNED_INT, ((NativeImageAccessor) (Object) image).wvgetPixels());
+            }
+        }
+
+        private static void upload(int i, ResourceManager manager, ResourceLocation resourceLocation) throws IOException {
+            try (NativeImage image = NativeImage.read(manager.getResource(resourceLocation).getInputStream())) {
+
+            }
         }
     }
 }

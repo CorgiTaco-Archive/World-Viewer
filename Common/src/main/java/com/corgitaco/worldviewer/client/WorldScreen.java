@@ -6,6 +6,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Matrix4f;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMaps;
@@ -96,6 +97,9 @@ public final class WorldScreen extends Screen {
 
     private final Formatter formatter = new Formatter(builder);
 
+    private final Matrix4f projection = new Matrix4f();
+    private final Matrix4f modelView = new Matrix4f();
+
     private final Object2IntMap<Holder<Biome>> biomeColors;
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
@@ -111,10 +115,10 @@ public final class WorldScreen extends Screen {
 
         // Colors.
         var map = new Object2IntOpenHashMap<Holder<Biome>>();
+
         var random = level.random;
 
         level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
-
             var r = Mth.randomBetweenInclusive(random, 5, 100);
             var g = Mth.randomBetweenInclusive(random, 5, 100);
             var b = Mth.randomBetweenInclusive(random, 5, 100);
@@ -145,19 +149,20 @@ public final class WorldScreen extends Screen {
                     ResourceLocation resourceLocation = new ResourceLocation(location.getNamespace(), "worldview/icon/structure/" + location.getPath() + ".png");
 
                     if (resourceManager.hasResource(resourceLocation)) {
-                        try {
-                            InputStream inputStream = resourceManager.getResource(resourceLocation).getInputStream();
-                            NativeImage read = NativeImage.read(inputStream);
-                            DynamicTexture dynamicTexture = new DynamicTexture(read);
+                        try (DynamicTexture texture = new DynamicTexture(NativeImage.read(resourceManager.getResource(resourceLocation).getInputStream()))) {
+
                             structureRender = (stack, drawX, drawZ) -> {
-                                RenderSystem.setShaderTexture(0, dynamicTexture.getId());
+                                RenderSystem.setShaderTexture(0, texture.getId());
                                 RenderSystem.enableBlend();
-                                int width = (int) (read.getWidth() / scale);
-                                int height = (int) (read.getHeight() / scale);
-                                GuiComponent.blit(stack, drawX - (width / 2), drawZ - (width / 2), 0.0F, 0.0F, width, height, width, height);
+                                var pixels = texture.getPixels();
+                                if (pixels == null) {
+                                    return;
+                                }
+                                int width = (int) (pixels.getWidth() / scale);
+                                int height = (int) (pixels.getHeight() / scale);
+                                GuiComponent.blit(stack, drawX - (width / 2), drawZ - (height / 2), 0.0F, 0.0F, width, height, width, height);
                                 RenderSystem.disableBlend();
                             };
-
 
                         } catch (IOException e) {
                             throw new RuntimeException(e);
@@ -315,7 +320,11 @@ public final class WorldScreen extends Screen {
             }));
         }
 
-//        sprite.draw(RenderSystem.getProjectionMatrix(), RenderSystem.getModelViewMatrix());
+        projection.setIdentity();
+
+        modelView.setIdentity();
+
+        // sprite.draw(projection, modelView);
 
         stack.popPose();
 

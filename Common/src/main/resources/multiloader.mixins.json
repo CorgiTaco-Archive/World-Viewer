@@ -9,7 +9,8 @@
   "client": [
     "ExampleCommonMixin",
     "KeyMappingAccess",
-    "MixinOptionsScreen"
+    "MixinOptionsScreen",
+    "NativeImageAccessor"
   ],
   "server": [
   ],
