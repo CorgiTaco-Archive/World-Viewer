@@ -177,9 +177,9 @@ public final class WorldScreenStructureSprites {
         }
 
         if (CrossPlatformHelper.SEPARATE_SHADER_OBJECTS) {
-            glProgramUniform1i(program, samplerUniform, 1);
+            glProgramUniform1i(program, samplerUniform, 2);
         } else {
-            glUniform1f(samplerUniform, 1);
+            glUniform1f(samplerUniform, 2);
         }
 
         glBindVertexArray(vao);
@@ -230,6 +230,12 @@ public final class WorldScreenStructureSprites {
         private Texture() {
             var manager = Minecraft.getInstance().getResourceManager();
 
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+            glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+            glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+
             if (CrossPlatformHelper.DIRECT_STATE_ACCESS) {
                 texture = glCreateTextures(GL_TEXTURE_2D_ARRAY);
 
@@ -244,7 +250,7 @@ public final class WorldScreenStructureSprites {
                     e.printStackTrace();
                 }
 
-                glBindTextureUnit(1, texture);
+                glBindTextureUnit(2, texture);
             } else {
                 texture = glGenTextures();
 
