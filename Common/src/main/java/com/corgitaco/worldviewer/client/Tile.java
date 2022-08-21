@@ -33,6 +33,8 @@ public final class Tile implements AutoCloseable {
 
     public static final boolean BETTER_HEIGHTMAP_COLOR_BLENDING = true;
 
+    public static final List<TileImageMaker> IMAGES = new ArrayList<>();
+
     public final DynamicTexture biomes;
     private final int worldX;
     private final int worldZ;
@@ -51,11 +53,18 @@ public final class Tile implements AutoCloseable {
     @Nullable
     private final DynamicTexture biomeHeights;
 
+    private final List<DynamicTexture> textures = new ArrayList<>();
+
     public Tile(boolean computeHeightmap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
         this.worldX = worldX;
         this.worldZ = worldZ;
         this.size = size;
         this.dataAtPos = new DataAtPosition[size][size];
+
+        List<TileImage> tileImages = new ArrayList<>();
+        for (TileImageMaker image : IMAGES) {
+            tileImages.add(image.make(level, size, size));
+        }
 
         var generator = level.getChunkSource().getGenerator();
 
@@ -105,7 +114,14 @@ public final class Tile implements AutoCloseable {
                         }
                     }
                 }
+                for (TileImage tileImage : tileImages) {
+                    tileImage.forWorldCoords(sampleX, sampleZ, worldPos.getX(), worldPos.getZ(), sampleResolution);
+                }
             }
+        }
+
+        for (TileImage tileImage : tileImages) {
+            this.textures.add(tileImage.getTexture());
         }
 
 
@@ -248,6 +264,9 @@ public final class Tile implements AutoCloseable {
             renderImage(stack, screenTileMinX, screenTileMinZ, this.slimeChunks, 0.9F);
         }
 
+        for (DynamicTexture texture : this.textures) {
+            renderImage(stack, screenTileMinX, screenTileMinZ, texture, 0.3F);
+        }
     }
 
     private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {
@@ -271,6 +290,9 @@ public final class Tile implements AutoCloseable {
             this.biomeHeights.close();
         }
         biomes.close();
+        for (DynamicTexture texture : this.textures) {
+            texture.close();
+        }
     }
 
     public void tick() {
@@ -283,5 +305,29 @@ public final class Tile implements AutoCloseable {
         BIOMES,
         HEIGHTMAP,
         BIOME_HEIGHTMAP;
+    }
+
+    public abstract static class TileImage {
+
+        private final long seed;
+        private final int sizeX;
+        private final int sizeZ;
+
+        public TileImage(long seed, int sizeX, int sizeZ) {
+            this.seed = seed;
+            this.sizeX = sizeX;
+            this.sizeZ = sizeZ;
+        }
+
+        public void forWorldCoords(int sampleX, int sampleZ, int worldX, int worldZ, int sampleResolution) {
+        }
+
+        protected abstract DynamicTexture getTexture();
+    }
+
+    @FunctionalInterface
+    public interface TileImageMaker {
+
+        TileImage make(ServerLevel serverLevel, int sizeX, int sizeZ);
     }
 }

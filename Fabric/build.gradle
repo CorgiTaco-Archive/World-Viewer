@@ -45,6 +45,13 @@ dependencies {
     }
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+
+
+    modImplementation("curse.maven:byg-391378:3868888")
+    modImplementation("curse.maven:terraf-565956:3725995")
+
+    include implementation("com.electronwill.night-config:toml:${nightconfig_version}")
+    include implementation("com.electronwill.night-config:core:${nightconfig_version}")
     implementation project(":Common")
 }
 
