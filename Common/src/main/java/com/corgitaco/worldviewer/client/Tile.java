@@ -14,6 +14,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -24,11 +25,15 @@ import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.feature.StructureFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
 public final class Tile implements AutoCloseable {
-    public final DynamicTexture texture;
+
+    public static final boolean BETTER_HEIGHTMAP_COLOR_BLENDING = true;
+
+    public final DynamicTexture biomes;
     private final int worldX;
     private final int worldZ;
     private final int size;
@@ -36,10 +41,17 @@ public final class Tile implements AutoCloseable {
     private final DataAtPosition[][] dataAtPos;
 
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
+
+    @Nullable
     public final DynamicTexture slimeChunks;
 
+    @Nullable
+    public final DynamicTexture heightmap;
 
-    public Tile(boolean heightMap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
+    @Nullable
+    private final DynamicTexture biomeHeights;
+
+    public Tile(boolean computeHeightmap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
         this.worldX = worldX;
         this.worldZ = worldZ;
         this.size = size;
@@ -47,16 +59,20 @@ public final class Tile implements AutoCloseable {
 
         var generator = level.getChunkSource().getGenerator();
 
-        NativeImage nativeImage = new NativeImage(size, size, true);
+        NativeImage biomes = new NativeImage(size, size, true);
+        @Nullable
+        NativeImage heightmapImg = computeHeightmap ? new NativeImage(size, size, true) : null;
+
+        @Nullable
+        NativeImage biomeHeightsImg = computeHeightmap ? new NativeImage(size, size, true) : null;
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
-
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
                 worldPos.set(worldX - sampleX, ySample, worldZ - sampleZ);
                 Holder<Biome> biomeHolder = level.getBiome(worldPos);
                 int y = ySample;
-                if (heightMap) {
+                if (computeHeightmap) {
                     boolean hasChunk = level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(worldPos.getX()), SectionPos.blockToSectionCoord(worldPos.getZ()));
                     if (hasChunk) {
                         y = level.getHeight(Heightmap.Types.OCEAN_FLOOR, worldPos.getX(), worldPos.getZ());
@@ -69,8 +85,24 @@ public final class Tile implements AutoCloseable {
                     for (int z = 0; z < sampleResolution; z++) {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
-                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX(), y, worldPos.getZ()));
-                        nativeImage.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
+
+
+                        dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX() - x, y, worldPos.getZ() - z));
+                        int biomeColor = colorLookup.getOrDefault(biomeHolder, 0);
+
+
+                        if (computeHeightmap) {
+                            float pct = Mth.clamp(Mth.inverseLerp(y, generator.getMinY(), generator.getMinY() + generator.getGenDepth()), 0, 1F);
+                            float a = Mth.clampedLerp(255, 0, pct);
+
+                            int color = Math.round(a);
+                            int grayScale = FastColor.ARGB32.color(255, color, color, color);
+                            int mixed = FastColor.ARGB32.multiply(biomeColor, grayScale);
+
+                            biomeHeightsImg.setPixelRGBA(dataX, dataZ, mixed);
+
+                            heightmapImg.setPixelRGBA(dataX, dataZ, grayScale);
+                        }
                     }
                 }
             }
@@ -144,12 +176,24 @@ public final class Tile implements AutoCloseable {
                 }
             }
         }
-        texture = new DynamicTexture(nativeImage);
+        this.biomes = new DynamicTexture(biomes);
 
         if (lazySlimeChunks == null) {
             this.slimeChunks = null;
         } else {
             this.slimeChunks = new DynamicTexture(lazySlimeChunks);
+        }
+
+        if (heightmapImg != null) {
+            this.heightmap = new DynamicTexture(heightmapImg);
+        } else {
+            this.heightmap = null;
+        }
+
+        if (biomeHeightsImg != null) {
+            this.biomeHeights = new DynamicTexture(biomeHeightsImg);
+        } else {
+            this.biomeHeights = null;
         }
     }
 
@@ -181,32 +225,63 @@ public final class Tile implements AutoCloseable {
         return this.dataAtPos[mouseX - screenTileMinX][mouseZ - screenTileMinZ];
     }
 
-    public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ) {
-        renderImage(stack, screenTileMinX, screenTileMinZ, this.texture);
-        if (this.slimeChunks != null) {
-
-            // TODO: Add
-            RenderSystem.setShaderColor(1, 1, 1, 0.7F);
-            renderImage(stack, screenTileMinX, screenTileMinZ, this.slimeChunks);
-            RenderSystem.setShaderColor(1, 1, 1, 1);
+    public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, TileRenderType tileRenderType, boolean slimeChunks) {
+        switch (tileRenderType) {
+            case BIOMES -> {
+                if (biomes != null) {
+                    renderImage(stack, screenTileMinX, screenTileMinZ, this.biomes, 1);
+                }
+            }
+            case HEIGHTMAP -> {
+                if (heightmap != null) {
+                    renderImage(stack, screenTileMinX, screenTileMinZ, this.heightmap, 1);
+                }
+            }
+            case BIOME_HEIGHTMAP -> {
+                if (biomeHeights != null) {
+                    renderImage(stack, screenTileMinX, screenTileMinZ, this.biomeHeights, 1);
+                }
+            }
         }
+
+        if (this.slimeChunks != null && slimeChunks) {
+            renderImage(stack, screenTileMinX, screenTileMinZ, this.slimeChunks, 0.9F);
+        }
+
     }
 
-    private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture) {
+    private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {
+        RenderSystem.setShaderColor(1, 1, 1, opacity);
         RenderSystem.setShaderTexture(0, texture.getId());
         RenderSystem.enableBlend();
         GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1, 1, 1, 1);
     }
 
     @Override
     public void close() {
-        texture.close();
+        if (this.slimeChunks != null) {
+            this.slimeChunks.close();
+        }
+        if (this.heightmap != null) {
+            this.heightmap.close();
+        }
+        if (this.biomeHeights != null) {
+            this.biomeHeights.close();
+        }
+        biomes.close();
     }
 
     public void tick() {
     }
 
     record DataAtPosition(Holder<Biome> biomeHolder, BlockPos worldPos) {
+    }
+
+    public enum TileRenderType {
+        BIOMES,
+        HEIGHTMAP,
+        BIOME_HEIGHTMAP;
     }
 }

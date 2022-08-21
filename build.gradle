@@ -1,11 +1,11 @@
 subprojects {
-    
+
     apply plugin: 'java'
-    
+
     java.toolchain.languageVersion = JavaLanguageVersion.of(17)
     java.withSourcesJar()
     java.withJavadocJar()
-        
+
     jar {
         manifest {
             attributes([
@@ -22,7 +22,7 @@ subprojects {
             ])
         }
     }
-    
+
     repositories {
 
         mavenCentral()
@@ -40,6 +40,13 @@ subprojects {
         maven {
             url = "https://maven.daporkchop.net/"
         }
+
+        maven {
+            url "https://cursemaven.com"
+            content {
+                includeGroup "curse.maven"
+            }
+        }
     }
 
     dependencies {
@@ -47,10 +54,10 @@ subprojects {
         implementation "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
         implementation "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
     }
-    
+
 
     tasks.withType(JavaCompile).configureEach {
-    
+
         it.options.encoding = 'UTF-8'
         it.options.release = 17
     }

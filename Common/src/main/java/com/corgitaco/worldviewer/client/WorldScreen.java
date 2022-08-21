@@ -77,9 +77,9 @@ public final class WorldScreen extends Screen {
 
     private BoundingBox worldViewArea;
 
-    private boolean heightMap = false;
+    private boolean heightMap = true;
 
-    private int sampleResolution = 16;
+    private int sampleResolution = 32;
 
     public LongList tilesToSubmit = new LongArrayList();
 
@@ -102,6 +102,9 @@ public final class WorldScreen extends Screen {
     private final Object2IntMap<Holder<Biome>> biomeColors;
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
+    private final Tile.TileRenderType tileRenderType = Tile.TileRenderType.BIOME_HEIGHTMAP;
+
+    private final boolean renderSlimeChunks = false;
 
     private int totalTilesToRender;
 
@@ -138,9 +141,9 @@ public final class WorldScreen extends Screen {
         level.getChunkSource().getGenerator().possibleStructureSets().map(Holder::value).map(StructureSet::structures).forEach(structureSelectionEntries -> {
             for (StructureSet.StructureSelectionEntry structureSelectionEntry : structureSelectionEntries) {
                 Holder<ConfiguredStructureFeature<?, ?>> structure = structureSelectionEntry.structure();
-                var r = Mth.randomBetweenInclusive(random, 150, 256);
-                var g = Mth.randomBetweenInclusive(random, 150, 256);
-                var b = Mth.randomBetweenInclusive(random, 150, 256);
+                var r = Mth.randomBetweenInclusive(random, 200, 256);
+                var g = Mth.randomBetweenInclusive(random, 200, 256);
+                var b = Mth.randomBetweenInclusive(random, 200, 256);
                 int color = FastColor.ARGB32.color(255, r, g, b);
 
                 ResourceLocation location = structure.unwrapKey().orElseThrow().location();
@@ -174,7 +177,7 @@ public final class WorldScreen extends Screen {
                     } else {
                         structureRender = (stack, drawX, drawZ) -> {
                             int range = 16;
-                            GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
+//                            GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
                         };
                     }
 
@@ -275,21 +278,18 @@ public final class WorldScreen extends Screen {
         super.render(stack, mouseX, mouseZ, partialTicks);
     }
 
-    private void renderTiles(PoseStack stack, int mouseX, int mouseZ, float partialTicks) {
+    private void renderTiles(PoseStack stack, int mouseX, int mouseY, float partialTicks) {
         stack.pushPose();
         stack.scale(scale, scale, 0);
-
+        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
         int screenCenterX = getScreenCenterX();
         int screenCenterZ = getScreenCenterZ();
 
         int scaledMouseX = (int) (mouseX / scale);
-        int scaledMouseZ = (int) (mouseZ / scale);
-
-        int worldX = this.origin.getX() - (screenCenterX - scaledMouseX);
-        int worldZ = this.origin.getZ() - (screenCenterZ - scaledMouseZ);
+        int scaledMouseY = (int) (mouseY / scale);
 
         builder.setLength(0);
-        MutableComponent tooltip = new TextComponent(formatter.format("%s, %s, %s", worldX, "???", worldZ).toString());
+        MutableComponent tooltip = new TextComponent(formatter.format("%s, %s, %s", getWorldXFromMouseX(mouseX), "???", getWorldZFromMouseY(mouseY)).toString());
 
         for (Tile tileToRender : this.toRender) {
             int localX = getLocalXFromWorldX(tileToRender.getWorldX());
@@ -297,10 +297,10 @@ public final class WorldScreen extends Screen {
 
             int screenTileMinX = (screenCenterX + localX);
             int screenTileMinZ = (screenCenterZ + localZ);
-            tileToRender.render(stack, screenTileMinX, screenTileMinZ);
+            tileToRender.render(stack, screenTileMinX, screenTileMinZ, this.tileRenderType, this.renderSlimeChunks);
 
-            if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ)) {
-                Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseZ, screenTileMinX, screenTileMinZ);
+            if (tileToRender.isMouseIntersecting(scaledMouseX, scaledMouseY, screenTileMinX, screenTileMinZ)) {
+                Tile.DataAtPosition dataAtPosition = tileToRender.getBiomeAtMousePosition(scaledMouseX, scaledMouseY, screenTileMinX, screenTileMinZ);
 
                 builder.setLength(0);
                 var pos = dataAtPosition.worldPos();
@@ -327,7 +327,7 @@ public final class WorldScreen extends Screen {
 
         stack.popPose();
 
-        renderTooltip(stack, tooltip, mouseX, mouseZ);
+        renderTooltip(stack, tooltip, mouseX, mouseY);
 
         projection.setIdentity();
 
@@ -336,7 +336,7 @@ public final class WorldScreen extends Screen {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        sprite.draw(projection, modelView);
+//        sprite.draw(projection, modelView);
 
         glDisable(GL_BLEND);
     }
@@ -396,7 +396,15 @@ public final class WorldScreen extends Screen {
                 });
             }
         } else {
-            this.scale = (float) Mth.clamp(this.scale + (delta * 0.05), 0.05, 1.5);
+//
+//            if (delta > 0) {
+//                int worldXFromMouseX = getWorldXFromMouseX(mouseX);
+//                int worldZFromMouseY = getWorldZFromMouseY(mouseY);
+//                this.origin.set(worldXFromMouseX, this.origin.getY(), worldZFromMouseY);
+//            }
+            this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.03, 1.5);
+
+
             cull();
         }
         this.scrollCooldown = 30;
@@ -463,11 +471,27 @@ public final class WorldScreen extends Screen {
     }
 
     public int getXTileRange() {
-        return blockToTile(getScreenCenterX()) + 1;
+        return blockToTile(getScreenCenterX()) + 2;
     }
 
     public int getZTileRange() {
-        return blockToTile(getScreenCenterZ()) + 1;
+        return blockToTile(getScreenCenterZ()) + 2;
+    }
+
+    //TODO: Figure out why this is incorrect.
+    public int getWorldXFromMouseX(double mouseX) {
+        int screenCenterX = getScreenCenterX();
+        int scaledMouseX = (int) Math.round(mouseX / scale);
+
+        return this.origin.getX() + (screenCenterX - scaledMouseX);
+    }
+
+    //TODO: Figure out why this is incorrect.
+    public int getWorldZFromMouseY(double mouseZ) {
+        int screenCenterZ = getScreenCenterZ();
+        int scaledMouseZ = (int) Math.round(mouseZ / scale);
+
+        return this.origin.getZ() + (screenCenterZ - scaledMouseZ);
     }
 
     private static ExecutorService createExecutor() {

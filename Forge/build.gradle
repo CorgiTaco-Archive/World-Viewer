@@ -122,6 +122,12 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     compileOnly project(":Common")
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    implementation fg.deobf("curse.maven:tf-227639:3901400")
+    implementation fg.deobf("curse.maven:terraf-363820:3811021")
+//    implementation fg.deobf("curse.maven:terralith-513688:3696607")
+//    implementation fg.deobf("curse.maven:william-490686:3942089")
+    implementation fg.deobf("curse.maven:tfc-302973:3943694")
+    implementation fg.deobf("curse.maven:patchouli-306770:3846086")
 }
 
 tasks.withType(JavaCompile) {
