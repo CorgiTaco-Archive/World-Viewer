@@ -42,9 +42,7 @@ import org.jetbrains.annotations.NotNull;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Formatter;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.*;
 
@@ -75,7 +73,7 @@ public final class WorldScreen extends Screen {
     int tileSize = tileToBlock(1);
 
     // Concurrent to avoid locking the main thread and will be replaced with batching later on.
-    private final Queue<Tile> toRender = new ConcurrentLinkedQueue<>();
+    private final Set<Tile> toRender = ConcurrentHashMap.newKeySet();
 
     private BoundingBox worldViewArea;
 
@@ -104,6 +102,9 @@ public final class WorldScreen extends Screen {
     private final Object2IntMap<Holder<Biome>> biomeColors;
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
+
+    private int totalTilesToRender;
+
     public WorldScreen(Component $$0) {
         super($$0);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
@@ -120,9 +121,9 @@ public final class WorldScreen extends Screen {
         var random = level.random;
 
         level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
-            var r = Mth.randomBetweenInclusive(random, 5, 100);
-            var g = Mth.randomBetweenInclusive(random, 5, 100);
-            var b = Mth.randomBetweenInclusive(random, 5, 100);
+            var r = Mth.randomBetweenInclusive(random, 20, 255);
+            var g = Mth.randomBetweenInclusive(random, 20, 255);
+            var b = Mth.randomBetweenInclusive(random, 20, 255);
 
             map.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
         });
@@ -185,11 +186,8 @@ public final class WorldScreen extends Screen {
 
 
     private void setWorldArea() {
-        int screenCenterX = getScreenCenterX();
-        int screenCenterZ = getScreenCenterZ();
-
-        int xRange = blockToTile(screenCenterX) + 2;
-        int zRange = blockToTile(screenCenterZ) + 2;
+        int xRange = getXTileRange();
+        int zRange = getZTileRange();
         this.worldViewArea = BoundingBox.fromCorners(
                 new Vec3i(
                         this.origin.getX() - tileToBlock(xRange) - 1,
@@ -202,6 +200,8 @@ public final class WorldScreen extends Screen {
                         this.origin.getZ() + tileToBlock(zRange) + 1
                 )
         );
+
+        this.totalTilesToRender = xRange * zRange;
     }
 
     @Override
@@ -211,24 +211,29 @@ public final class WorldScreen extends Screen {
             handleTileTracking();
         } else {
         }
+
+        int currentlyRenderingCount = toRender.size();
+//        if (currentlyRenderingCount >= this.totalTilesToRender) {
+//            throw new RuntimeException(String.format("Too many tiles were rendering. Rendering %s when the total should not exceed %s.", currentlyRenderingCount, totalTilesToRender));
+//        }
         super.tick();
     }
 
     private void handleTileTracking() {
-        long originChunk = tileKey(this.origin);
-        int centerX = getScreenCenterX();
-        int centerZ = getScreenCenterZ();
+        long originTile = tileKey(this.origin);
 
-        int xRange = blockToTile(centerX) + 2;
-        int zRange = blockToTile(centerZ) + 2;
+        int xTileRange = getXTileRange();
+        int zTileRange = getZTileRange();
 
-        for (int x = -xRange; x <= xRange; x++) {
-            for (int z = -zRange; z <= zRange; z++) {
-                int worldTileX = getTileX(originChunk) + x;
-                int worldTileZ = getTileZ(originChunk) + z;
-                long worldChunk = LongPackingUtil.tileKey(worldTileX, worldTileZ);
-                if (submitted.add(worldChunk)) {
-                    tilesToSubmit.add(worldChunk);
+        for (int x = -xTileRange; x <= xTileRange; x++) {
+            for (int z = -zTileRange; z <= zTileRange; z++) {
+                int worldTileX = getTileX(originTile) + x;
+                int worldTileZ = getTileZ(originTile) + z;
+                long worldTile = LongPackingUtil.tileKey(worldTileX, worldTileZ);
+                int worldX = getWorldXFromTileKey(worldTileX);
+                int worldZ = getWorldZFromTileKey(worldTileZ);
+                if (submitted.add(worldTile)) {
+                    tilesToSubmit.add(worldTile);
                 }
             }
         }
@@ -239,9 +244,7 @@ public final class WorldScreen extends Screen {
             LongList tilePositions = tilesToSubmit.subList(0, to);
 
             for (long tilePos : tilePositions) {
-                this.trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    return threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key, biomeColors);
-                });
+                this.trackedTileFutures.computeIfAbsent(tilePos, key -> threadSafety.createCompletableFuture(heightMap, origin.getY(), tileSize, sampleResolution, level, shift, key, biomeColors));
             }
             this.tilesToSubmit.removeElements(0, to);
         }
@@ -305,6 +308,7 @@ public final class WorldScreen extends Screen {
             }
 
         }
+
         for (Tile tileToRender : this.toRender) {
             tileToRender.getPositionsForStructure().forEach(((configuredStructureFeatureHolder, longs) -> {
                 for (long structureChunkPos : longs) {
@@ -456,6 +460,14 @@ public final class WorldScreen extends Screen {
 
     public int getLocalZFromWorldZ(int worldZ) {
         return this.origin.getZ() - worldZ;
+    }
+
+    public int getXTileRange() {
+        return blockToTile(getScreenCenterX()) + 1;
+    }
+
+    public int getZTileRange() {
+        return blockToTile(getScreenCenterZ()) + 1;
     }
 
     private static ExecutorService createExecutor() {

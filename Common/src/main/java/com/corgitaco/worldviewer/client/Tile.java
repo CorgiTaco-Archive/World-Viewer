@@ -13,6 +13,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.FastColor;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -35,6 +36,7 @@ public final class Tile implements AutoCloseable {
     private final DataAtPosition[][] dataAtPos;
 
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
+    public final DynamicTexture slimeChunks;
 
 
     public Tile(boolean heightMap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
@@ -45,7 +47,7 @@ public final class Tile implements AutoCloseable {
 
         var generator = level.getChunkSource().getGenerator();
 
-        NativeImage pixel = new NativeImage(size, size, false);
+        NativeImage nativeImage = new NativeImage(size, size, true);
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
 
@@ -68,26 +70,43 @@ public final class Tile implements AutoCloseable {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
                         dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX(), y, worldPos.getZ()));
-                        pixel.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
+                        nativeImage.setPixelRGBA(dataX, dataZ, colorLookup.getOrDefault(biomeHolder, 0));
                     }
                 }
             }
         }
 
-        texture = new DynamicTexture(pixel);
 
-        computeStructurePositions(worldX, worldZ, size, level, generator);
-    }
+        NativeImage lazySlimeChunks = null;
 
-    private void computeStructurePositions(int worldX, int worldZ, int size, ServerLevel level, ChunkGenerator generator) {
-        for (Holder<StructureSet> structureSetHolder : level.registryAccess().registryOrThrow(Registry.STRUCTURE_SET_REGISTRY).asHolderIdMap()) {
-            StructureSet structureSet = structureSetHolder.value();
+        for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
+            for (int z = 0; z < SectionPos.blockToSectionCoord(size); z++) {
+                int chunkX = SectionPos.blockToSectionCoord(worldX) - x;
+                int chunkZ = SectionPos.blockToSectionCoord(worldZ) - z;
+                long chunkKey = ChunkPos.asLong(chunkX, chunkZ);
 
-            for (int x = SectionPos.blockToSectionCoord(worldX + 1); x <= SectionPos.blockToSectionCoord(worldX + size - 1); x++) {
-                for (int z = SectionPos.blockToSectionCoord(worldZ + 1); z <= SectionPos.blockToSectionCoord(worldZ + size - 1); z++) {
-                    if (structureSet.placement().isFeatureChunk(generator, level.getSeed(), x, z)) {
+                boolean isSlimeChunk = WorldgenRandom.seedSlimeChunk(chunkX, chunkZ, level.getSeed(), 987234911L).nextInt(10) == 0;
+
+                if (isSlimeChunk) {
+                    if (lazySlimeChunks == null) {
+                        lazySlimeChunks = new NativeImage(size, size, true);
+                        lazySlimeChunks.fillRect(0, 0, size, size, FastColor.ARGB32.color(0, 0, 0, 0));
+                    }
+
+                    int dataX = SectionPos.sectionToBlockCoord(x);
+                    int dataZ = SectionPos.sectionToBlockCoord(z);
+
+                    lazySlimeChunks.fillRect(dataX, dataZ, 16, 16, FastColor.ARGB32.color(255, 120, 190, 93));
+                }
+
+
+                for (Holder<StructureSet> structureSetHolder : level.registryAccess().registryOrThrow(Registry.STRUCTURE_SET_REGISTRY).asHolderIdMap()) {
+
+                    StructureSet structureSet = structureSetHolder.value();
+
+                    if (structureSet.placement().isFeatureChunk(generator, level.getSeed(), chunkX, chunkZ)) {
                         WorldgenRandom worldgenrandom = new WorldgenRandom(new LegacyRandomSource(0L));
-                        worldgenrandom.setLargeFeatureSeed(level.getSeed(), x, z);
+                        worldgenrandom.setLargeFeatureSeed(level.getSeed(), chunkX, chunkZ);
                         List<StructureSet.StructureSelectionEntry> arraylist = new ArrayList<>(structureSet.structures());
 
                         int i = 0;
@@ -112,9 +131,9 @@ public final class Tile implements AutoCloseable {
                             StructureSet.StructureSelectionEntry structureset$structureselectionentry3 = arraylist.get(k);
                             Holder<ConfiguredStructureFeature<?, ?>> configuredStructureFeatureHolder = structureset$structureselectionentry3.structure();
                             ConfiguredStructureFeature<?, ?> value = configuredStructureFeatureHolder.value();
-                            if (canCreate(level, generator, x, z, value)) {
-                                this.positionsForStructure.computeIfAbsent(configuredStructureFeatureHolder, key -> new LongArraySet()).add(ChunkPos.asLong(x, z));
-                                return;
+                            if (canCreate(level, generator, chunkX, chunkZ, value)) {
+                                this.positionsForStructure.computeIfAbsent(configuredStructureFeatureHolder, key -> new LongArraySet()).add(chunkKey);
+                                break;
                             }
 
                             arraylist.remove(k);
@@ -124,6 +143,13 @@ public final class Tile implements AutoCloseable {
                     }
                 }
             }
+        }
+        texture = new DynamicTexture(nativeImage);
+
+        if (lazySlimeChunks == null) {
+            this.slimeChunks = null;
+        } else {
+            this.slimeChunks = new DynamicTexture(lazySlimeChunks);
         }
     }
 
@@ -156,7 +182,18 @@ public final class Tile implements AutoCloseable {
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ) {
-        RenderSystem.setShaderTexture(0, this.texture.getId());
+        renderImage(stack, screenTileMinX, screenTileMinZ, this.texture);
+        if (this.slimeChunks != null) {
+
+            // TODO: Add
+            RenderSystem.setShaderColor(1, 1, 1, 0.7F);
+            renderImage(stack, screenTileMinX, screenTileMinZ, this.slimeChunks);
+            RenderSystem.setShaderColor(1, 1, 1, 1);
+        }
+    }
+
+    private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture) {
+        RenderSystem.setShaderTexture(0, texture.getId());
         RenderSystem.enableBlend();
         GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.disableBlend();
@@ -165,6 +202,9 @@ public final class Tile implements AutoCloseable {
     @Override
     public void close() {
         texture.close();
+    }
+
+    public void tick() {
     }
 
     record DataAtPosition(Holder<Biome> biomeHolder, BlockPos worldPos) {
