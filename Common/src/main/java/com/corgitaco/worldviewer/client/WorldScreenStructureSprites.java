@@ -7,7 +7,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Matrix4f;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceManager;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -16,9 +15,9 @@ import java.nio.ByteBuffer;
 
 import static org.lwjgl.opengl.ARBBufferStorage.glBufferStorage;
 import static org.lwjgl.opengl.ARBDirectStateAccess.*;
+import static org.lwjgl.opengl.ARBSeparateShaderObjects.glProgramUniform1i;
 import static org.lwjgl.opengl.ARBSeparateShaderObjects.glProgramUniformMatrix4fv;
 import static org.lwjgl.opengl.GL33.*;
-import static org.lwjgl.system.MemoryUtil.NULL;
 
 // Wip Instanced rendering.
 
@@ -33,6 +32,7 @@ public final class WorldScreenStructureSprites {
     private final int program;
     private final int projectionUniform;
     private final int modelViewUniform;
+    private final int samplerUniform;
 
     private final Texture texture = new Texture();
 
@@ -139,6 +139,7 @@ public final class WorldScreenStructureSprites {
 
         projectionUniform = glGetUniformLocation(program, "projection");
         modelViewUniform = glGetUniformLocation(program, "modelView");
+        samplerUniform = glGetUniformLocation(program, "sampler");
     }
 
     // Gets freed after uploaded to VBO and EBO.
@@ -173,6 +174,12 @@ public final class WorldScreenStructureSprites {
                 modelView.store(buffer);
                 glUniformMatrix4fv(modelViewUniform, false, buffer);
             }
+        }
+
+        if (CrossPlatformHelper.SEPARATE_SHADER_OBJECTS) {
+            glProgramUniform1i(program, samplerUniform, 1);
+        } else {
+            glUniform1f(samplerUniform, 1);
         }
 
         glBindVertexArray(vao);
@@ -229,33 +236,23 @@ public final class WorldScreenStructureSprites {
                 glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
 
-                glTextureStorage3D(texture, 1, GL_RGBA8, 24, 24, 2);
+                glTextureStorage3D(texture, 1, GL_RGBA8, 24, 24, 1);
 
-                try {
-                    uploadDirectStateAccess(texture, 0, manager, DESERT_PYRAMID);
-                    uploadDirectStateAccess(texture, 1, manager, JUNGLE_PYRAMID);
+                try (NativeImage image = NativeImage.read(manager.getResource(DESERT_PYRAMID).getInputStream())) {
+                    glTextureSubImage3D(texture, 0, 0, 0, 0, image.getWidth(), image.getHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).wvgetPixels());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
 
-                glBindTextureUnit(0, texture);
+                glBindTextureUnit(1, texture);
             } else {
                 texture = glGenTextures();
 
-                glActiveTexture(0);
+                glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
 
                 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-
-                glTexImage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, 24, 24, 2, 0, GL_RGBA8, GL_UNSIGNED_INT, NULL);
-
-                try {
-                    upload(0, manager, DESERT_PYRAMID);
-                    upload(1, manager, JUNGLE_PYRAMID);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
 
                 glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             }
@@ -263,18 +260,6 @@ public final class WorldScreenStructureSprites {
 
         private void destroy () {
             glDeleteTextures(texture);
-        }
-
-        private static void uploadDirectStateAccess(int texture, int i, ResourceManager manager, ResourceLocation resourceLocation) throws IOException {
-            try (NativeImage image = NativeImage.read(manager.getResource(resourceLocation).getInputStream())) {
-                glTextureSubImage3D(texture, 0, 0, 0, 0, image.getWidth(), image.getHeight(), i, GL_RGBA, GL_UNSIGNED_INT, ((NativeImageAccessor) (Object) image).wvgetPixels());
-            }
-        }
-
-        private static void upload(int i, ResourceManager manager, ResourceLocation resourceLocation) throws IOException {
-            try (NativeImage image = NativeImage.read(manager.getResource(resourceLocation).getInputStream())) {
-
-            }
         }
     }
 }

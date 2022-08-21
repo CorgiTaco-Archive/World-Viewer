@@ -50,6 +50,7 @@ import java.util.concurrent.*;
 
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
+import static org.lwjgl.opengl.GL11.*;
 
 public final class WorldScreen extends Screen {
     private static final int BIT_MASK = 0xFF;
@@ -320,15 +321,20 @@ public final class WorldScreen extends Screen {
             }));
         }
 
+        stack.popPose();
+
+        renderTooltip(stack, tooltip, mouseX, mouseZ);
+
         projection.setIdentity();
 
         modelView.setIdentity();
 
-        // sprite.draw(projection, modelView);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        stack.popPose();
+        sprite.draw(projection, modelView);
 
-        renderTooltip(stack, tooltip, mouseX, mouseZ);
+        glDisable(GL_BLEND);
     }
 
     @Override
