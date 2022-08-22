@@ -47,12 +47,18 @@ subprojects {
                 includeGroup "curse.maven"
             }
         }
+
+        maven {
+            url 'https://maven.chaottic.com/repository/maven-snapshots/'
+        }
     }
 
     dependencies {
         implementation "net.daporkchop.lib:common:0.5.7-SNAPSHOT"
         implementation "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
         implementation "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
+
+        implementation 'com.chaottic:commons:1.0-SNAPSHOT'
     }
 
 

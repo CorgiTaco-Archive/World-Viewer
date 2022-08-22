@@ -25,9 +25,7 @@ public final class CrossPlatformHelper {
 
     public static int createShader(int type, String source) {
         var shader = glCreateShader(type);
-
         glShaderSource(shader, source);
-
         glCompileShader(shader);
         return shader;
     }

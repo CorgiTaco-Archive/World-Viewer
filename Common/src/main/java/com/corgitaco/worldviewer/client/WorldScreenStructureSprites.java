@@ -245,7 +245,7 @@ public final class WorldScreenStructureSprites {
                 glTextureStorage3D(texture, 1, GL_RGBA8, 24, 24, 1);
 
                 try (NativeImage image = NativeImage.read(manager.getResource(DESERT_PYRAMID).getInputStream())) {
-                    glTextureSubImage3D(texture, 0, 0, 0, 0, image.getWidth(), image.getHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).wvgetPixels());
+                    glTextureSubImage3D(texture, 0, 0, 0, 0, image.getWidth(), image.getHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).wvGetPixels());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
