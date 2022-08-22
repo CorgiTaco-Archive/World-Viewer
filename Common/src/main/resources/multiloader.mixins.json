@@ -4,6 +4,7 @@
   "package": "com.corgitaco.worldviewer.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "MixinBiomeAccess",
     "UtilAccess"
   ],
   "client": [

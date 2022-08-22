@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMaps;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import net.minecraft.Util;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -27,6 +28,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.chat.TranslatableComponent;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -35,6 +37,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -54,6 +57,8 @@ public final class WorldScreen extends Screen {
     private static final int BIT_MASK = 0xFF;
 
     private ExecutorService executorService = createExecutor();
+
+    private static final Object2IntMap<ResourceKey<Biome>> COLORS = new Object2IntOpenHashMap<>();
 
 
     private final Long2ObjectLinkedOpenHashMap<CompletableFuture<Tile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
@@ -77,7 +82,6 @@ public final class WorldScreen extends Screen {
 
     private BoundingBox worldViewArea;
 
-    private boolean heightMap = true;
 
     private int sampleResolution = 32;
 
@@ -102,7 +106,9 @@ public final class WorldScreen extends Screen {
     private final Object2IntMap<Holder<Biome>> biomeColors;
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
-    private final Tile.TileRenderType tileRenderType = Tile.TileRenderType.BIOME_HEIGHTMAP;
+    private final Tile.TileRenderType tileRenderType = Tile.TileRenderType.BIOMES;
+
+    private boolean heightMap = Tile.TileRenderType.BIOME_HEIGHTMAP == tileRenderType || Tile.TileRenderType.HEIGHTMAP == tileRenderType;
 
     private final boolean renderSlimeChunks = false;
 
@@ -122,19 +128,109 @@ public final class WorldScreen extends Screen {
         var map = new Object2IntOpenHashMap<Holder<Biome>>();
 
         var random = level.random;
+        Object2IntOpenHashMap<ResourceKey<Biome>> colors = Util.make(new Object2IntOpenHashMap<>(), map1 -> {
+            map1.put(Biomes.BADLANDS, tryParseColor("0xD94515"));
+            map1.put(Biomes.BAMBOO_JUNGLE, tryParseColor("0x2C4205"));
+            map1.put(Biomes.BEACH, tryParseColor("0xFADE55"));
+            map1.put(Biomes.DESERT, tryParseColor("0xFA9418"));
+            map1.put(Biomes.BIRCH_FOREST, tryParseColor("0x307444"));
+            map1.put(Biomes.PLAINS, tryParseColor("0x8DB360"));
+            map1.put(Biomes.WINDSWEPT_HILLS, tryParseColor("0x606060"));
+            map1.put(Biomes.FOREST, tryParseColor("0x056621"));
+            map1.put(Biomes.TAIGA, tryParseColor("0x0B6659"));
+            map1.put(Biomes.SWAMP, tryParseColor("0x07F9B2"));
+            map1.put(Biomes.RIVER, tryParseColor("0x0000FF"));
+            map1.put(Biomes.NETHER_WASTES, tryParseColor("0xFF0000"));
+            map1.put(Biomes.THE_VOID, tryParseColor("0x8080FF"));
+            map1.put(Biomes.FROZEN_RIVER, tryParseColor("0xA0A0A0"));
+            map1.put(Biomes.SNOWY_PLAINS, tryParseColor("0xFFFFFF"));
+            map1.put(Biomes.MUSHROOM_FIELDS, tryParseColor("0xFF00FF"));
+            map1.put(Biomes.JUNGLE, tryParseColor("0x537B09"));
+            map1.put(Biomes.SPARSE_JUNGLE, tryParseColor("0x628B17"));
+            map1.put(Biomes.STONY_SHORE, tryParseColor("0xA2A284"));
+            map1.put(Biomes.SNOWY_BEACH, tryParseColor("0xFAF0C0"));
+            map1.put(Biomes.DARK_FOREST, tryParseColor("0x40511A"));
+            map1.put(Biomes.SNOWY_TAIGA, tryParseColor("0x31554A"));
+            map1.put(Biomes.OLD_GROWTH_PINE_TAIGA, tryParseColor("0x596651"));
+            map1.put(Biomes.OLD_GROWTH_SPRUCE_TAIGA, tryParseColor("0x818E79"));
+            map1.put(Biomes.SAVANNA, tryParseColor("0xBDB25F"));
+            map1.put(Biomes.SAVANNA_PLATEAU, tryParseColor("0xA79D24"));
+            map1.put(Biomes.WOODED_BADLANDS, tryParseColor("0xCA8C65"));
+            map1.put(Biomes.ERODED_BADLANDS, tryParseColor("0xFF6D3D"));
+            map1.put(Biomes.SUNFLOWER_PLAINS, tryParseColor("0xB5DB88"));
+            map1.put(Biomes.FLOWER_FOREST, tryParseColor("0x2D8E49"));
+            map1.put(Biomes.ICE_SPIKES, tryParseColor("0xB4DCDC"));
+            map1.put(Biomes.OCEAN, tryParseColor("0x000070"));
+            map1.put(Biomes.DEEP_OCEAN, tryParseColor("0x000030"));
+            map1.put(Biomes.COLD_OCEAN, tryParseColor("0x0056d6"));
+            map1.put(Biomes.DEEP_COLD_OCEAN, tryParseColor("0x004ecc"));
+            map1.put(Biomes.LUKEWARM_OCEAN, tryParseColor("0x45ADF2"));
+            map1.put(Biomes.DEEP_LUKEWARM_OCEAN, tryParseColor("0x3BA3E8"));
+            map1.put(Biomes.FROZEN_OCEAN, tryParseColor("0x9090A0"));
+            map1.put(Biomes.DEEP_FROZEN_OCEAN, tryParseColor("0x676791"));
+            map1.put(Biomes.FROZEN_PEAKS, tryParseColor("0x8BC0FC"));
+            map1.put(Biomes.WINDSWEPT_SAVANNA, tryParseColor("0xE5DA87"));
+            map1.put(Biomes.WINDSWEPT_FOREST, tryParseColor("0x589C6C"));
+            map1.put(Biomes.STONY_PEAKS, tryParseColor("0xC0C0C0"));
+            map1.put(Biomes.JAGGED_PEAKS, tryParseColor("0x969696"));
+            map1.put(Biomes.GROVE, tryParseColor("0x42FFBa"));
+        });
 
         level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
-            var r = Mth.randomBetweenInclusive(random, 20, 255);
-            var g = Mth.randomBetweenInclusive(random, 20, 255);
-            var b = Mth.randomBetweenInclusive(random, 20, 255);
 
-            map.put(holder, (255 << 24) | ((r & BIT_MASK) << 16) | ((g & BIT_MASK) << 8) | (b & BIT_MASK));
+
+            Biome value = holder.value();
+
+            float baseTemperature = value.getBaseTemperature();
+            float downfall = value.getDownfall();
+
+            float lerp = Mth.inverseLerp(baseTemperature, -2, 2);
+            int r = (int) Mth.clampedLerp(137, 139, lerp);
+            int g = (int) Mth.clampedLerp(207, 0, lerp);
+            int b = (int) Mth.clampedLerp(240, 0, lerp);
+
+            int randomColor = NativeImage.combine(255, b, g, r);
+            map.put(holder, colors.getOrDefault(holder.unwrapKey().orElseThrow(), randomColor));
         });
 
         computeStructureRenderers();
 
         biomeColors = Object2IntMaps.unmodifiable(map);
     }
+
+    public static int tryParseColor(String input) {
+        int result = Integer.MAX_VALUE;
+
+        if (input.isEmpty()) {
+            return result;
+        }
+
+        try {
+            String colorSubString = input.substring(2);
+            result = (255 << 24) | (Integer.parseInt(colorSubString, 16));
+
+            int r = FastColor.ARGB32.red(result);
+            int g = FastColor.ARGB32.green(result);
+            int b = FastColor.ARGB32.blue(result);
+            int a = FastColor.ARGB32.alpha(result);
+
+            return NativeImage.combine(a, b, g, r);
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+        }
+
+        return result;
+    }
+
+    public static int rgbaFromInt(int argb_int) {
+
+        int b = argb_int & 255;
+        int g = (argb_int >> 8) & 255;
+        int r = (argb_int >> 16) & 255;
+        int a = (argb_int >> 24) & 255;
+        return r << 24 | g << 16 | b << 8 | a;
+    }
+
 
     private void computeStructureRenderers() {
         var random = level.random;

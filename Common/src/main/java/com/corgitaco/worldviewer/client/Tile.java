@@ -1,5 +1,6 @@
 package com.corgitaco.worldviewer.client;
 
+import com.corgitaco.worldviewer.mixin.MixinBiomeAccess;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -36,6 +37,7 @@ public final class Tile implements AutoCloseable {
     public static final List<TileImageMaker> IMAGES = new ArrayList<>();
 
     public final DynamicTexture biomes;
+    public final DynamicTexture biomeTemps;
     private final int worldX;
     private final int worldZ;
     private final int size;
@@ -53,6 +55,7 @@ public final class Tile implements AutoCloseable {
     @Nullable
     private final DynamicTexture biomeHeights;
 
+
     private final List<DynamicTexture> textures = new ArrayList<>();
 
     public Tile(boolean computeHeightmap, int ySample, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, Object2IntMap<Holder<Biome>> colorLookup) {
@@ -66,9 +69,28 @@ public final class Tile implements AutoCloseable {
             tileImages.add(image.make(level, size, size));
         }
 
+        float minTemp = 0;
+        float maxTemp = 0;
+
+        for (Holder<Biome> biomeHolder : colorLookup.keySet()) {
+            Biome value = biomeHolder.value();
+            float baseTemperature = value.getBaseTemperature();
+            if (minTemp > baseTemperature) {
+                minTemp = baseTemperature;
+            }
+
+            if (maxTemp < baseTemperature) {
+                maxTemp = baseTemperature;
+            }
+        }
+
+        maxTemp += 0.5;
+        minTemp -= 0.5;
+
         var generator = level.getChunkSource().getGenerator();
 
         NativeImage biomes = new NativeImage(size, size, true);
+        NativeImage biomeTempsImg = new NativeImage(size, size, true);
         @Nullable
         NativeImage heightmapImg = computeHeightmap ? new NativeImage(size, size, true) : null;
 
@@ -78,8 +100,8 @@ public final class Tile implements AutoCloseable {
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                worldPos.set(worldX - sampleX, ySample, worldZ - sampleZ);
-                Holder<Biome> biomeHolder = level.getBiome(worldPos);
+                worldPos.set(worldX - sampleX, 0, worldZ - sampleZ);
+
                 int y = ySample;
                 if (computeHeightmap) {
                     boolean hasChunk = level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(worldPos.getX()), SectionPos.blockToSectionCoord(worldPos.getZ()));
@@ -89,6 +111,12 @@ public final class Tile implements AutoCloseable {
                         y = generator.getBaseHeight(worldPos.getX(), worldPos.getZ(), Heightmap.Types.OCEAN_FLOOR, level);
                     }
                 }
+                worldPos.set(worldX - sampleX, y, worldZ - sampleZ);
+
+
+                Holder<Biome> biomeHolder = level.getBiome(worldPos);
+                Biome value = biomeHolder.value();
+                float temp = ((MixinBiomeAccess) (Object) value).wv_getTemperature(worldPos);
 
                 for (int x = 0; x < sampleResolution; x++) {
                     for (int z = 0; z < sampleResolution; z++) {
@@ -98,7 +126,14 @@ public final class Tile implements AutoCloseable {
 
                         dataAtPos[dataX][dataZ] = new DataAtPosition(biomeHolder, new BlockPos(worldPos.getX() - x, y, worldPos.getZ() - z));
                         int biomeColor = colorLookup.getOrDefault(biomeHolder, 0);
+                        biomes.setPixelRGBA(dataX, dataZ, biomeColor);
+                        float tempPct = Mth.clamp(Mth.inverseLerp(temp, minTemp, maxTemp), 0, 1F);
 
+                        int tempColor = Math.round(Mth.clampedLerp(255, 0, tempPct));
+
+                        int tempGrayScale = FastColor.ARGB32.color(255, tempColor, tempColor, tempColor);
+
+                        biomeTempsImg.setPixelRGBA(dataX, dataZ, tempGrayScale);
 
                         if (computeHeightmap) {
                             float pct = Mth.clamp(Mth.inverseLerp(y, generator.getMinY(), generator.getMinY() + generator.getGenDepth()), 0, 1F);
@@ -211,6 +246,7 @@ public final class Tile implements AutoCloseable {
         } else {
             this.biomeHeights = null;
         }
+        this.biomeTemps = new DynamicTexture(biomeTempsImg);
     }
 
     private static <FC extends FeatureConfiguration, F extends StructureFeature<FC>> boolean canCreate(ServerLevel level, ChunkGenerator generator, int x, int z, ConfiguredStructureFeature<FC, F> value) {
@@ -258,6 +294,7 @@ public final class Tile implements AutoCloseable {
                     renderImage(stack, screenTileMinX, screenTileMinZ, this.biomeHeights, 1);
                 }
             }
+            case BIOME_TEMPERATURE -> renderImage(stack, screenTileMinX, screenTileMinZ, this.biomeTemps, 1);
         }
 
         if (this.slimeChunks != null && slimeChunks) {
@@ -270,6 +307,9 @@ public final class Tile implements AutoCloseable {
     }
 
     private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {
+        if (texture.getPixels() == null) {
+            return;
+        }
         RenderSystem.setShaderColor(1, 1, 1, opacity);
         RenderSystem.setShaderTexture(0, texture.getId());
         RenderSystem.enableBlend();
@@ -293,6 +333,7 @@ public final class Tile implements AutoCloseable {
         for (DynamicTexture texture : this.textures) {
             texture.close();
         }
+        this.biomeTemps.close();
     }
 
     public void tick() {
@@ -304,7 +345,8 @@ public final class Tile implements AutoCloseable {
     public enum TileRenderType {
         BIOMES,
         HEIGHTMAP,
-        BIOME_HEIGHTMAP;
+        BIOME_HEIGHTMAP,
+        BIOME_TEMPERATURE
     }
 
     public abstract static class TileImage {

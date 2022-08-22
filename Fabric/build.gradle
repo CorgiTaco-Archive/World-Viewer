@@ -47,7 +47,7 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
 
-    modImplementation("curse.maven:byg-391378:3868888")
+//    modImplementation("curse.maven:byg-391378:3868888")
     modImplementation("curse.maven:terraf-565956:3725995")
 
     include implementation("com.electronwill.night-config:toml:${nightconfig_version}")
