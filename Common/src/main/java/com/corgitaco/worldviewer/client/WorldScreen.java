@@ -107,7 +107,7 @@ public final class WorldScreen extends Screen {
     private final Object2IntMap<Holder<Biome>> biomeColors;
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
-    private final Tile.TileRenderType tileRenderType = Tile.TileRenderType.BIOMES;
+    private final Tile.TileRenderType tileRenderType = Tile.TileRenderType.BIOME_HEIGHTMAP;
 
     private boolean heightMap = Tile.TileRenderType.BIOME_HEIGHTMAP == tileRenderType || Tile.TileRenderType.HEIGHTMAP == tileRenderType;
 
@@ -224,9 +224,9 @@ public final class WorldScreen extends Screen {
                                 RenderSystem.setShaderTexture(0, texture.getId());
                                 RenderSystem.enableBlend();
                                 var pixels = texture.getPixels();
-                                if (pixels == null) {
-                                    return;
-                                }
+//                                if (pixels == null) {
+//                                    return;
+//                                }
                                 int width = (int) (pixels.getWidth() / scale);
                                 int height = (int) (pixels.getHeight() / scale);
                                 GuiComponent.blit(stack, drawX - (width / 2), drawZ - (height / 2), 0.0F, 0.0F, width, height, width, height);
