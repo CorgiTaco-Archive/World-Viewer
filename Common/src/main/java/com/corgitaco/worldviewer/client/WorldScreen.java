@@ -584,7 +584,7 @@ public final class WorldScreen extends Screen {
         if (hex.isEmpty()) {
             return 0;
         }
-        return (255 << 24) | Color.toAbgr(Color.fromHex(hex));
+        return (255 << 24) | Color.toABGR(Color.fromHex(hex));
     }
 
     @FunctionalInterface

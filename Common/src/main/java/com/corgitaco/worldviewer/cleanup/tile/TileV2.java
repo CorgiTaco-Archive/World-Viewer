@@ -2,7 +2,10 @@ package com.corgitaco.worldviewer.cleanup.tile;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 
 import java.util.*;
@@ -11,8 +14,14 @@ public class TileV2 {
 
 
     private final HashMap<String, TileLayer> tileLayers = new HashMap<>();
+    private final int tileWorldX;
+    private final int tileWorldZ;
+    private final int size;
 
     public TileV2(Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
+        this.tileWorldX = tileWorldX;
+        this.tileWorldZ = tileWorldZ;
+        this.size = size;
         Map<String, Object> cache = new HashMap<>();
         factories.forEach((s, factory) -> tileLayers.put(s, factory.make(cache, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2.level, worldScreenv2)));
     }
@@ -23,6 +32,46 @@ public class TileV2 {
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
+        for (TileLayer value : tileLayers.values()) {
+            DynamicTexture image = value.getImage();
+            if (image != null) {
+                renderImage(stack, screenTileMinX, screenTileMinZ, image, 1F);
+            }
+        }
+    }
 
+    public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
+        for (TileLayer value : tileLayers.values()) {
+            DynamicTexture image = value.getImage();
+            if (image != null) {
+                value.afterTilesRender(stack, screenTileMinX, screenTileMinZ, 0, 0);
+            }
+        }
+    }
+
+    public void close() {
+        for (TileLayer value : this.tileLayers.values()) {
+            value.close();
+        }
+    }
+
+    public int getTileWorldX() {
+        return tileWorldX;
+    }
+
+    public int getTileWorldZ() {
+        return tileWorldZ;
+    }
+
+    private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {
+        if (texture.getPixels() == null) {
+            return;
+        }
+        RenderSystem.setShaderColor(1, 1, 1, opacity);
+        RenderSystem.setShaderTexture(0, texture.getId());
+        RenderSystem.enableBlend();
+        GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1, 1, 1, 1);
     }
 }

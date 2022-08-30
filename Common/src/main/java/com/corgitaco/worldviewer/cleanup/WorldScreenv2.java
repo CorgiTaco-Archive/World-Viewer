@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Vec3i;
@@ -19,6 +20,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -35,6 +37,9 @@ public class WorldScreenv2 extends Screen {
 
     public int sampleResolution = 32;
 
+    int tileSize = tileToBlock(1);
+
+
     public final BlockPos.MutableBlockPos origin;
 
     float scale = 0.5F;
@@ -42,15 +47,21 @@ public class WorldScreenv2 extends Screen {
 
     public BoundingBox worldViewArea;
 
+    private int scrollCooldown;
+
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, WorldScreen.StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
+    TileHandling tileHandling;
 
-
-    protected WorldScreenv2(Component title) {
+    public WorldScreenv2(Component title) {
         super(title);
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        this.level = server.getLevel(Level.OVERWORLD);
         this.origin = new BlockPos.MutableBlockPos().set(Minecraft.getInstance().player.blockPosition());
         computeStructureRenderers();
         setWorldArea();
+
+        this.tileHandling = new TileHandling(level, origin);
     }
 
     private void computeStructureRenderers() {
@@ -112,12 +123,31 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     public void tick() {
+        if (this.scrollCooldown < 0) {
+            this.tileHandling.tick(this);
+        }
+
+        scrollCooldown--;
         super.tick();
     }
 
     @Override
-    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTicks) {
-        super.render(poseStack, mouseX, mouseY, partialTicks);
+    public void render(PoseStack stack, int mouseX, int mouseY, float partialTicks) {
+
+        stack.pushPose();
+        stack.scale(scale, scale, 0);
+        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
+
+        this.tileHandling.render(stack, mouseX, mouseY, partialTicks, this);
+        stack.popPose();
+        super.render(stack, mouseX, mouseY, partialTicks);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
+        cull();
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -128,46 +158,17 @@ public class WorldScreenv2 extends Screen {
             }
         } else {
             this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.03, 1.5);
-//            cull();
+            cull();
         }
-//        this.scrollCooldown = 30;
+        this.scrollCooldown = 30;
         return true;
     }
 
+    private void cull() {
+        setWorldArea();
+        this.tileHandling.cull(this);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    }
 
 
     private void setWorldArea() {
