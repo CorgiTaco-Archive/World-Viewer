@@ -1,6 +1,7 @@
 package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
+import com.corgitaco.worldviewer.cleanup.tile.TileV2;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -16,6 +17,7 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.Map;
 
 public class HeightsLayer extends TileLayer {
@@ -23,8 +25,8 @@ public class HeightsLayer extends TileLayer {
     private final DynamicTexture heights;
 
 
-    public HeightsLayer(Map<String, Object> cache, int y, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
-        super(cache, y, worldX, worldZ, size, sampleResolution, level, screen);
+    public HeightsLayer(@Nullable CompoundTag tag, Map<String, Object> cache, int y, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
+        super(tag, cache, y, worldX, worldZ, size, sampleResolution, level, screen);
 
         NativeImage image = new NativeImage(size, size, true);
         Long2IntOpenHashMap heights = (Long2IntOpenHashMap) cache.computeIfAbsent("heights", o -> new Long2IntOpenHashMap());
@@ -44,9 +46,7 @@ public class HeightsLayer extends TileLayer {
                     }
                 });
 
-                float pct = Mth.clamp(Mth.inverseLerp(y, generator.getMinY(), generator.getMinY() + generator.getGenDepth()), 0, 1F);
-                int color = Math.round(Mth.clampedLerp(0, 255, pct));
-                int grayScale = FastColor.ARGB32.color(255, color, color, color);
+                int grayScale = getGrayScale(y, generator);
 
                 for (int x = 0; x < sampleResolution; x++) {
                     for (int z = 0; z < sampleResolution; z++) {
@@ -60,10 +60,20 @@ public class HeightsLayer extends TileLayer {
         this.heights = new DynamicTexture(image);
     }
 
+    public static int getGrayScale(int y, ChunkGenerator generator) {
+        float pct = Mth.clamp(Mth.inverseLerp(y, generator.getMinY(), 255), 0, 1F);
+        int color = Math.round(Mth.clampedLerp(128, 255, pct));
+        return FastColor.ARGB32.color(255, color, color, color);
+    }
+
+    @Override
+    public boolean canRender(TileV2 tileV2, Collection<String> currentlyRendering) {
+        return !currentlyRendering.contains("biomes");
+    }
 
     @Override
     public CompoundTag save() {
-        return null;
+        return new CompoundTag();
     }
 
     @Override

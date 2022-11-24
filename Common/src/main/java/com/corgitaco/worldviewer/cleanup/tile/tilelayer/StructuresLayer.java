@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -16,6 +17,7 @@ import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.feature.StructureFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -24,8 +26,8 @@ public class StructuresLayer extends TileLayer {
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
     private final WorldScreenv2 screen;
 
-    public StructuresLayer(Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
-        super(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
+    public StructuresLayer(@Nullable CompoundTag fromDisk, Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
+        super(fromDisk, cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
         this.screen = screen;
         ChunkGenerator generator = level.getChunkSource().getGenerator();
         for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
@@ -82,9 +84,17 @@ public class StructuresLayer extends TileLayer {
     }
 
     @Override
-    public void afterTilesRender(PoseStack stack, double mouseX, double mouseY, double mouseWorldX, double mouseWorldZ) {
+    public void afterTilesRender(PoseStack stack, double screenTileMinX, double mouseY, double mouseWorldX, double mouseWorldZ) {
         this.positionsForStructure.forEach(((configuredStructureFeatureHolder, longs) -> {
-            this.screen.getStructureRendering().getOrDefault(configuredStructureFeatureHolder, ((stack1, scaledX, scaledZ) -> {}));
+            for (long structureChunkPos : longs) {
+                int structureWorldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(structureChunkPos), 7);
+                int structureWorldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(structureChunkPos), 7);
+
+                int drawX = this.screen.getScreenCenterX() + this.screen.getLocalXFromWorldX(structureWorldX);
+                int drawZ = this.screen.getScreenCenterZ() + this.screen.getLocalZFromWorldZ(structureWorldZ);
+
+                this.screen.getStructureRendering().get(configuredStructureFeatureHolder).render(stack, drawX, drawZ);
+            }
         }));
     }
 

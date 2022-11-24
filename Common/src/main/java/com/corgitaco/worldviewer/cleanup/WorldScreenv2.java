@@ -132,6 +132,12 @@ public class WorldScreenv2 extends Screen {
     }
 
     @Override
+    public void onClose() {
+        this.tileHandling.close();
+        super.onClose();
+    }
+
+    @Override
     public void render(PoseStack stack, int mouseX, int mouseY, float partialTicks) {
 
         stack.pushPose();
@@ -167,7 +173,6 @@ public class WorldScreenv2 extends Screen {
     private void cull() {
         setWorldArea();
         this.tileHandling.cull(this);
-
     }
 
 

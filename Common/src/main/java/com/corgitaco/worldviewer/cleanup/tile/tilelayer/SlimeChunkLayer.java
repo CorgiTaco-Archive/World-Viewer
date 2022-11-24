@@ -1,6 +1,7 @@
 package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
+import com.corgitaco.worldviewer.common.WorldViewer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -12,6 +13,8 @@ import net.minecraft.util.FastColor;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class SlimeChunkLayer extends TileLayer {
@@ -19,8 +22,25 @@ public class SlimeChunkLayer extends TileLayer {
     @Nullable
     private final DynamicTexture dynamicTexture;
 
-    public SlimeChunkLayer(Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
-        super(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
+    public SlimeChunkLayer(@Nullable CompoundTag compoundTag, Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
+        super(compoundTag, cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
+        @Nullable DynamicTexture dynamicTexture1;
+
+        if (compoundTag != null) {
+            try {
+                dynamicTexture1 = new DynamicTexture(NativeImage.read(ByteBuffer.wrap(compoundTag.getByteArray("slime_chunks"))));
+            } catch (IOException e) {
+                e.printStackTrace();
+                WorldViewer.LOGGER.error(String.format("Could not read Slime Chunks on disk. For tile {%s, %s}", tileWorldX, tileWorldZ));
+                dynamicTexture1 = new DynamicTexture(getDynamicTexture(tileWorldX, tileWorldZ, size, level));
+            }
+        } else {
+            dynamicTexture1 = new DynamicTexture(getDynamicTexture(tileWorldX, tileWorldZ, size, level));
+        }
+        this.dynamicTexture = dynamicTexture1;
+    }
+
+    private NativeImage getDynamicTexture(int tileWorldX, int tileWorldZ, int size, ServerLevel level) {
         NativeImage lazySlimeChunks = null;
 
         for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
@@ -42,12 +62,20 @@ public class SlimeChunkLayer extends TileLayer {
                 }
             }
         }
-        this.dynamicTexture = new DynamicTexture(lazySlimeChunks);
+        return lazySlimeChunks;
     }
 
     @Override
     public CompoundTag save() {
-        return new CompoundTag();
+        CompoundTag compoundTag = new CompoundTag();
+        if (this.dynamicTexture != null && this.dynamicTexture.getPixels() != null) {
+            try {
+                compoundTag.putByteArray("slime_chunks", this.dynamicTexture.getPixels().asByteArray());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return compoundTag;
     }
 
     @Override

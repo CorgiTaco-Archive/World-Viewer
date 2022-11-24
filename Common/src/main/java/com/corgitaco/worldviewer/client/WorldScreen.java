@@ -1,6 +1,5 @@
 package com.corgitaco.worldviewer.client;
 
-import com.chaottic.commons.Color;
 import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -191,7 +190,7 @@ public final class WorldScreen extends Screen {
             int g = (int) Mth.clampedLerp(207, 0, lerp);
             int b = (int) Mth.clampedLerp(240, 0, lerp);
 
-            int randomColor = Color.abgr(255, r, g, b);
+            int randomColor = FastColor.ARGB32.color(255, r, g, b);
             map.put(holder, colors.getOrDefault(holder.unwrapKey().orElseThrow(), randomColor));
         });
 
@@ -208,7 +207,7 @@ public final class WorldScreen extends Screen {
                 var r = Mth.randomBetweenInclusive(random, 200, 256);
                 var g = Mth.randomBetweenInclusive(random, 200, 256);
                 var b = Mth.randomBetweenInclusive(random, 200, 256);
-                int color = Color.argb(255, r, g, b);
+                int color = FastColor.ARGB32.color(255, r, g, b);
 
                 ResourceLocation location = structure.unwrapKey().orElseThrow().location();
 
@@ -584,7 +583,7 @@ public final class WorldScreen extends Screen {
         if (hex.isEmpty()) {
             return 0;
         }
-        return (255 << 24) | Color.toABGR(Color.fromHex(hex));
+        return (255 << 24) | (int) Long.parseLong(hex.replace("#", "").replace("0x", ""), 16);
     }
 
     @FunctionalInterface

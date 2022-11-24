@@ -6,6 +6,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 
 import java.util.*;
@@ -23,7 +24,7 @@ public class TileV2 {
         this.tileWorldZ = tileWorldZ;
         this.size = size;
         Map<String, Object> cache = new HashMap<>();
-        factories.forEach((s, factory) -> tileLayers.put(s, factory.make(cache, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2.level, worldScreenv2)));
+        factories.forEach((s, factory) -> tileLayers.put(s, factory.make( null, cache, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2.level, worldScreenv2)));
     }
 
 
@@ -42,8 +43,8 @@ public class TileV2 {
 
     public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
         for (TileLayer value : tileLayers.values()) {
-            DynamicTexture image = value.getImage();
-            if (image != null) {
+            if (value.canRender(this, this.tileLayers.keySet())) {
+                DynamicTexture image = value.getImage();
                 value.afterTilesRender(stack, screenTileMinX, screenTileMinZ, 0, 0);
             }
         }
@@ -73,5 +74,18 @@ public class TileV2 {
         GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1, 1, 1, 1);
+    }
+
+    public Map<String, TileLayer> getTileLayers() {
+        return tileLayers;
+    }
+
+    public CompoundTag save() {
+        CompoundTag compoundTag = new CompoundTag();
+        this.tileLayers.forEach((key, tileLayer) -> {
+            compoundTag.put(key, tileLayer.save());
+        });
+
+        return compoundTag;
     }
 }

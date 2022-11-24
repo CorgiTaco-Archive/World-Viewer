@@ -59,12 +59,21 @@ public class TileHandling {
             LongList tilePositions = tilesToSubmit.subList(0, to);
 
             for (long tilePos : tilePositions) {
-              trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
-                    var x = worldScreenv2.getWorldXFromTileKey(tilePos);
-                    var z = worldScreenv2.getWorldZFromTileKey(tilePos);
+                trackedTileFutures.computeIfAbsent(tilePos, key -> {
+                    CompletableFuture<TileV2> tileV2CompletableFuture = CompletableFuture.supplyAsync(() -> {
+                        var x = worldScreenv2.getWorldXFromTileKey(tilePos);
+                        var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                    return new TileV2(TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
-                }, executorService));
+                        return new TileV2(TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                    }, executorService);
+
+                    tileV2CompletableFuture.thenAcceptAsync(tile -> {
+                        tiles.add(tile);
+                        trackedTileFutures.remove(tilePos);
+                    }, executorService);
+
+                    return tileV2CompletableFuture;
+                });
             }
             this.tilesToSubmit.removeElements(0, to);
         }
@@ -73,14 +82,7 @@ public class TileHandling {
         trackedTileFutures.forEach((tilePos, future) -> {
             int worldX = worldScreenv2.getWorldXFromTileKey(tilePos);
             int worldZ = worldScreenv2.getWorldZFromTileKey(tilePos);
-            if (worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ)) {
-                future.thenAcceptAsync(tile -> {
-                    tiles.add(tile);
-                    toRemove.add(tilePos);
-                }, executorService);
-
-            }
-            else if (!future.isCancelled()) {
+            if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
                 future.cancel(true);
                 toRemove.add(tilePos);
                 this.submitted.remove(tilePos);
@@ -120,13 +122,19 @@ public class TileHandling {
             int z = tile.getTileWorldZ();
             if (!worldScreenv2.worldViewArea.intersects(x, z, x, z)) {
                 tile.close();
-                submitted.remove(LongPackingUtil.tileKey(worldScreenv2.blockToTile(x),worldScreenv2. blockToTile(z)));
+                submitted.remove(LongPackingUtil.tileKey(worldScreenv2.blockToTile(x), worldScreenv2.blockToTile(z)));
 
                 return true;
             }
 
             return false;
         });
+    }
+
+    //TODO: Saving.
+    public void close() {
+        this.tiles.forEach(TileV2::close);
+        this.tiles.clear();
     }
 
     private static ExecutorService createExecutor() {

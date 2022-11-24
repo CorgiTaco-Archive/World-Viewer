@@ -1,6 +1,7 @@
 package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
+import com.corgitaco.worldviewer.common.WorldViewer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -19,22 +20,43 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class BiomeLayer extends TileLayer {
 
     private final DynamicTexture biomes;
 
-    public BiomeLayer(Map<String, Object> cache, int y, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
-        super(cache, y, worldX, worldZ, size, sampleResolution, level, screen);
+    public BiomeLayer(@Nullable CompoundTag compoundTag, Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
+        super(compoundTag, cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
+        DynamicTexture dynamicTexture;
 
+        if (compoundTag != null) {
+            try {
+                dynamicTexture = new DynamicTexture(NativeImage.read(ByteBuffer.wrap(compoundTag.getByteArray("data"))));
+            } catch (IOException e) {
+                e.printStackTrace();
+                WorldViewer.LOGGER.error(String.format("Could not read biomes on disk. For tile {%s, %s}", tileWorldX, tileWorldZ));
+                dynamicTexture = new DynamicTexture(buildImage(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level));
+            }
+        } else {
+            dynamicTexture = new DynamicTexture(buildImage(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level));
+        }
+        this.biomes = dynamicTexture;
+    }
+
+
+    @NotNull
+    private static NativeImage buildImage(Map<String, Object> cache, int y, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level) {
         Long2ObjectLinkedOpenHashMap<Holder<Biome>> biomes = (Long2ObjectLinkedOpenHashMap<Holder<Biome>>) cache.computeIfAbsent("biomes", o -> new Long2ObjectLinkedOpenHashMap<Holder<Biome>>());
         Long2IntOpenHashMap heights = (Long2IntOpenHashMap) cache.computeIfAbsent("heights", o -> new Long2IntOpenHashMap());
 
         NativeImage image = new NativeImage(size, size, true);
-
+        boolean heightColoring = false;
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
@@ -43,9 +65,12 @@ public class BiomeLayer extends TileLayer {
                 long key = ChunkPos.asLong(sampleX, sampleZ);
                 if (heights.containsKey(key)) {
                     y = heights.get(key);
+                    if (!heightColoring) {
+                        heightColoring = true;
+                    }
                 }
 
-                Holder<Biome> biomeHolder = biomes.computeIfAbsent(key, s ->  level.getBiome(worldPos));
+                Holder<Biome> biomeHolder = biomes.computeIfAbsent(key, s -> level.getBiome(worldPos));
 
                 for (int x = 0; x < sampleResolution; x++) {
                     for (int z = 0; z < sampleResolution; z++) {
@@ -61,18 +86,32 @@ public class BiomeLayer extends TileLayer {
 
                             return NativeImage.combine(255, b, g, r);
                         });
+
+                        if (heightColoring) {
+                            color = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, level.getChunkSource().getGenerator()));
+                        }
+
+
                         image.setPixelRGBA(dataX, dataZ, color);
                     }
                 }
             }
         }
-
-        this.biomes = new DynamicTexture(image);
+        return image;
     }
+
 
     @Override
     public CompoundTag save() {
-        return null;
+        CompoundTag compoundTag = new CompoundTag();
+        if (this.biomes.getPixels() != null) {
+            try {
+                compoundTag.putByteArray("data", this.biomes.getPixels().asByteArray());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return compoundTag;
     }
 
     @Override
@@ -94,6 +133,7 @@ public class BiomeLayer extends TileLayer {
     public void close() {
         this.biomes.close();
     }
+
 
     public static final Object2IntOpenHashMap<ResourceKey<Biome>> COLORS = Util.make(new Object2IntOpenHashMap<>(), map -> {
         map.put(Biomes.BADLANDS, tryParseColor("0xD94515"));
@@ -142,7 +182,6 @@ public class BiomeLayer extends TileLayer {
         map.put(Biomes.JAGGED_PEAKS, tryParseColor("0x969696"));
         map.put(Biomes.GROVE, tryParseColor("0x42FFBa"));
     });
-
 
 
     public static int tryParseColor(String input) {
