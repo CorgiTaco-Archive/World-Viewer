@@ -7,7 +7,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
@@ -37,14 +36,7 @@ public class HeightsLayer extends TileLayer {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
                 worldPos.set(worldX - sampleX, 0, worldZ - sampleZ);
 
-                y = heights.computeIfAbsent(ChunkPos.asLong(sampleX, sampleZ), aLong -> {
-                    boolean hasChunk = level.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(worldPos.getX()), SectionPos.blockToSectionCoord(worldPos.getZ()));
-                    if (hasChunk) {
-                        return level.getHeight(Heightmap.Types.OCEAN_FLOOR, worldPos.getX(), worldPos.getZ());
-                    } else {
-                        return generator.getBaseHeight(worldPos.getX(), worldPos.getZ(), Heightmap.Types.OCEAN_FLOOR, level);
-                    }
-                });
+                y = heights.computeIfAbsent(ChunkPos.asLong(sampleX, sampleZ), aLong -> generator.getBaseHeight(worldPos.getX(), worldPos.getZ(), Heightmap.Types.OCEAN_FLOOR, level));
 
                 int grayScale = getGrayScale(y, generator);
 

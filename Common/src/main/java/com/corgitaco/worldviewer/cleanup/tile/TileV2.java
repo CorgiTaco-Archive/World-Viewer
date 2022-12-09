@@ -2,6 +2,7 @@ package com.corgitaco.worldviewer.cleanup.tile;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
+import com.example.examplemod.Constants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
@@ -24,7 +25,22 @@ public class TileV2 {
         this.tileWorldZ = tileWorldZ;
         this.size = size;
         Map<String, Object> cache = new HashMap<>();
-        factories.forEach((s, factory) -> tileLayers.put(s, factory.make( null, cache, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2.level, worldScreenv2)));
+        long beforeMs = System.currentTimeMillis();
+
+        StringBuilder factoryTimings = new StringBuilder();
+        factories.forEach((s, factory) -> {
+            long beforeFactoryMs = System.currentTimeMillis();
+
+            tileLayers.put(s, factory.make( null, cache, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2.level, worldScreenv2));
+
+            long afterFactoryMs = System.currentTimeMillis();
+            if (!factoryTimings.isEmpty()) {
+                factoryTimings.append(", ");
+            }
+            factoryTimings.append(s).append(": ").append(afterFactoryMs - beforeFactoryMs).append("ms");
+
+        });
+        Constants.LOGGER.info("Created tile %s,%s in %sms (%s) for tile size of %s blocks & sample resolution of 1/%s blocks.".formatted(tileWorldX, tileWorldZ, (System.currentTimeMillis() - beforeMs), factoryTimings.toString(), size, sampleRes));
     }
 
 

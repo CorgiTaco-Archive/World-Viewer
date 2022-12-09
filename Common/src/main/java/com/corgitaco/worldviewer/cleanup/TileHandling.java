@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -17,7 +18,7 @@ import static com.example.examplemod.util.LongPackingUtil.getTileX;
 import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
 public class TileHandling {
-    private ExecutorService executorService = createExecutor();
+    private final ExecutorService executorService = createExecutor();
 
     private final Long2ObjectLinkedOpenHashMap<CompletableFuture<TileV2>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
     private final ServerLevel level;
@@ -30,6 +31,7 @@ public class TileHandling {
     public int submittedTaskCoolDown = 0;
 
     private final LongSet submitted = new LongOpenHashSet();
+    private final LongSet submittedForGeneration = new LongOpenHashSet();
 
     public TileHandling(ServerLevel level, BlockPos origin) {
         this.level = level;
@@ -54,32 +56,33 @@ public class TileHandling {
         }
 
         if (submittedTaskCoolDown >= 0) {
-            int tilesPerThreadCount = 2;
+            int tilesPerThreadCount = tilesToSubmit.size();
             int to = Math.min(tilesToSubmit.size(), tilesPerThreadCount);
             LongList tilePositions = tilesToSubmit.subList(0, to);
 
             for (long tilePos : tilePositions) {
-                trackedTileFutures.computeIfAbsent(tilePos, key -> {
-                    CompletableFuture<TileV2> tileV2CompletableFuture = CompletableFuture.supplyAsync(() -> {
-                        var x = worldScreenv2.getWorldXFromTileKey(tilePos);
-                        var z = worldScreenv2.getWorldZFromTileKey(tilePos);
+                if (submittedForGeneration.contains(tilePos)) {
+                    continue;
+                }
+                submittedForGeneration.add(tilePos);
+                trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
+                    var x = worldScreenv2.getWorldXFromTileKey(tilePos);
+                    var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                        return new TileV2(TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
-                    }, executorService);
-
-                    tileV2CompletableFuture.thenAcceptAsync(tile -> {
-                        tiles.add(tile);
-                        trackedTileFutures.remove(tilePos);
-                    }, executorService);
-
-                    return tileV2CompletableFuture;
-                });
+                    TileV2 tileV2 = new TileV2(TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                    tiles.add(tileV2);
+                    return tileV2;
+                }, executorService));
             }
             this.tilesToSubmit.removeElements(0, to);
         }
 
-        Set<Long> toRemove = ConcurrentHashMap.newKeySet();
+        LongSet toRemove = new LongOpenHashSet();
         trackedTileFutures.forEach((tilePos, future) -> {
+            if (future.isDone()) {
+                toRemove.add(tilePos);
+            }
+
             int worldX = worldScreenv2.getWorldXFromTileKey(tilePos);
             int worldZ = worldScreenv2.getWorldZFromTileKey(tilePos);
             if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
@@ -102,16 +105,6 @@ public class TileHandling {
             int screenTileMinZ = (worldScreenv2.getScreenCenterZ() + localZ);
 
             tileToRender.render(poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
-        }
-
-        for (TileV2 tileToRender : this.tiles) {
-
-            int localX = worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
-            int localZ = worldScreenv2.getLocalZFromWorldZ(tileToRender.getTileWorldZ());
-
-            int screenTileMinX = (worldScreenv2.getScreenCenterX() + localX);
-            int screenTileMinZ = (worldScreenv2.getScreenCenterZ() + localZ);
-
             tileToRender.afterTilesRender(poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
         }
     }
@@ -122,8 +115,9 @@ public class TileHandling {
             int z = tile.getTileWorldZ();
             if (!worldScreenv2.worldViewArea.intersects(x, z, x, z)) {
                 tile.close();
-                submitted.remove(LongPackingUtil.tileKey(worldScreenv2.blockToTile(x), worldScreenv2.blockToTile(z)));
-
+                long tileKey = LongPackingUtil.tileKey(worldScreenv2.blockToTile(x), worldScreenv2.blockToTile(z));
+                submitted.remove(tileKey);
+                submittedForGeneration.remove(tileKey);
                 return true;
             }
 
@@ -135,10 +129,12 @@ public class TileHandling {
     public void close() {
         this.tiles.forEach(TileV2::close);
         this.tiles.clear();
+
+        this.executorService.shutdownNow();
     }
 
     private static ExecutorService createExecutor() {
-        return Executors.newFixedThreadPool(4, new ThreadFactory() {
+        return Executors.newFixedThreadPool(Mth.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 25), new ThreadFactory() {
             private final ThreadFactory backing = Executors.defaultThreadFactory();
 
             @Override

@@ -35,7 +35,7 @@ public class WorldScreenv2 extends Screen {
 
     public final int shift = 9;
 
-    public int sampleResolution = 32;
+    public int sampleResolution = 16;
 
     int tileSize = tileToBlock(1);
 
