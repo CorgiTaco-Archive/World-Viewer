@@ -1,7 +1,6 @@
 package com.corgitaco.worldviewer.common;
 
 import com.corgitaco.worldviewer.client.WorldScreenStructureSpritesReloadListener;
-import com.corgitaco.worldviewer.common.WorldViewer;
 import com.example.examplemod.network.ForgeNetworkHandler;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.fml.common.Mod;
