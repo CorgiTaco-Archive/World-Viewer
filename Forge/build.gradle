@@ -129,6 +129,9 @@ dependencies {
 //    implementation fg.deobf("curse.maven:william-490686:3942089")
     implementation fg.deobf("curse.maven:tfc-302973:3943694")
     implementation fg.deobf("curse.maven:patchouli-306770:3846086")
+    library shadow("net.daporkchop.lib:common:0.5.7-SNAPSHOT")
+    library shadow("net.daporkchop.lib:primitive:0.5.7-SNAPSHOT")
+    library shadow("net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT")
 }
 
 tasks.withType(JavaCompile) {

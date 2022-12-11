@@ -1,7 +1,9 @@
 package com.corgitaco.worldviewer.cleanup;
 
+import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.TileV2;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
+import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.*;
@@ -33,9 +35,12 @@ public class TileHandling {
     private final LongSet submitted = new LongOpenHashSet();
     private final LongSet submittedForGeneration = new LongOpenHashSet();
 
+    private final DataTileManager tileManager;
+
     public TileHandling(ServerLevel level, BlockPos origin) {
         this.level = level;
         this.origin = origin;
+        tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())),level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
     }
 
     public void tick(WorldScreenv2 worldScreenv2) {
@@ -69,7 +74,7 @@ public class TileHandling {
                     var x = worldScreenv2.getWorldXFromTileKey(tilePos);
                     var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                    TileV2 tileV2 = new TileV2(TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                    TileV2 tileV2 = new TileV2(this.tileManager,  TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
                     tiles.add(tileV2);
                     return tileV2;
                 }, executorService));
@@ -125,16 +130,19 @@ public class TileHandling {
         });
     }
 
-    //TODO: Saving.
     public void close() {
+        this.executorService.shutdownNow();
         this.tiles.forEach(TileV2::close);
         this.tiles.clear();
-
-        this.executorService.shutdownNow();
+        this.tileManager.close();
     }
 
-    private static ExecutorService createExecutor() {
-        return Executors.newFixedThreadPool(Mth.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 25), new ThreadFactory() {
+    public static ExecutorService createExecutor() {
+        return createExecutor(Mth.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 25));
+    }
+
+    public static ExecutorService createExecutor(int processors) {
+        return Executors.newFixedThreadPool(processors, new ThreadFactory() {
             private final ThreadFactory backing = Executors.defaultThreadFactory();
 
             @Override

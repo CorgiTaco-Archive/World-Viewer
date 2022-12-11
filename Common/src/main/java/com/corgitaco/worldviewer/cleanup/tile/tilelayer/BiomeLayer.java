@@ -1,76 +1,43 @@
 package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
-import com.corgitaco.worldviewer.common.WorldViewer;
+import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Map;
 
 public class BiomeLayer extends TileLayer {
 
     private final DynamicTexture biomes;
 
-    public BiomeLayer(@Nullable CompoundTag compoundTag, Map<String, Object> cache, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, ServerLevel level, WorldScreenv2 screen) {
-        super(compoundTag, cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level, screen);
-        DynamicTexture dynamicTexture;
-
-        if (compoundTag != null) {
-            try {
-                dynamicTexture = new DynamicTexture(NativeImage.read(ByteBuffer.wrap(compoundTag.getByteArray("data"))));
-            } catch (IOException e) {
-                e.printStackTrace();
-                WorldViewer.LOGGER.error(String.format("Could not read biomes on disk. For tile {%s, %s}", tileWorldX, tileWorldZ));
-                dynamicTexture = new DynamicTexture(buildImage(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level));
-            }
-        } else {
-            dynamicTexture = new DynamicTexture(buildImage(cache, y, tileWorldX, tileWorldZ, size, sampleResolution, level));
-        }
-        this.biomes = dynamicTexture;
+    public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+        super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
+        this.biomes = new DynamicTexture(buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution));
     }
 
 
     @NotNull
-    private static NativeImage buildImage(Map<String, Object> cache, int y, int worldX, int worldZ, int size, int sampleResolution, ServerLevel level) {
-        Long2ObjectLinkedOpenHashMap<Holder<Biome>> biomes = (Long2ObjectLinkedOpenHashMap<Holder<Biome>>) cache.computeIfAbsent("biomes", o -> new Long2ObjectLinkedOpenHashMap<Holder<Biome>>());
-        Long2IntOpenHashMap heights = (Long2IntOpenHashMap) cache.computeIfAbsent("heights", o -> new Long2IntOpenHashMap());
-
+    private static NativeImage buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution) {
         NativeImage image = new NativeImage(size, size, true);
         boolean heightColoring = false;
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                worldPos.set(worldX - sampleX, y, worldZ - sampleZ);
+                int worldX = tileWorldX - sampleX;
+                int worldZ = tileWorldZ - sampleZ;
+                worldPos.set(worldX, y, worldZ);
 
-                long key = ChunkPos.asLong(sampleX, sampleZ);
-                if (heights.containsKey(key)) {
-                    y = heights.get(key);
-                    if (!heightColoring) {
-                        heightColoring = true;
-                    }
-                }
 
-                Holder<Biome> biomeHolder = biomes.computeIfAbsent(key, s -> level.getBiome(worldPos));
+                Holder<Biome> biomeHolder = tileManager.getBiome(worldX, worldZ);
 
                 for (int x = 0; x < sampleResolution; x++) {
                     for (int z = 0; z < sampleResolution; z++) {
@@ -87,41 +54,13 @@ public class BiomeLayer extends TileLayer {
                             return NativeImage.combine(255, b, g, r);
                         });
 
-                        if (heightColoring) {
-                            color = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, level.getChunkSource().getGenerator()));
-                        }
-
-
+                        color = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, tileManager.serverLevel()));
                         image.setPixelRGBA(dataX, dataZ, color);
                     }
                 }
             }
         }
         return image;
-    }
-
-
-    @Override
-    public CompoundTag save() {
-        CompoundTag compoundTag = new CompoundTag();
-        if (this.biomes.getPixels() != null) {
-            try {
-                compoundTag.putByteArray("data", this.biomes.getPixels().asByteArray());
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return compoundTag;
-    }
-
-    @Override
-    public @Nullable Component toolTip(double mouseX, double mouseY, double worldX, double worldZ) {
-        return null;
-    }
-
-    @Override
-    public void afterTilesRender(PoseStack stack, double mouseX, double mouseY, double worldX, double worldZ) {
-
     }
 
     @Override

@@ -1,11 +1,15 @@
 package com.example.examplemod.platform;
 
+import com.example.examplemod.Constants;
 import com.example.examplemod.network.ForgeNetworkHandler;
 import com.example.examplemod.network.S2CPacket;
 import com.example.examplemod.platform.services.IPlatformHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
+
+import java.nio.file.Path;
 
 public class ForgePlatformHelper implements IPlatformHelper {
 
@@ -17,6 +21,11 @@ public class ForgePlatformHelper implements IPlatformHelper {
     @Override
     public boolean isModLoaded(String modId) {
         return ModList.get().isLoaded(modId);
+    }
+
+    @Override
+    public Path configDir() {
+        return FMLPaths.CONFIGDIR.get().resolve(Constants.MOD_ID);
     }
 
     @Override

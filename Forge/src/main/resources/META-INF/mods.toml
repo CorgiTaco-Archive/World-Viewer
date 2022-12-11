@@ -3,7 +3,7 @@ loaderVersion="[40,)"
 license="All rights reserved"
 issueTrackerURL="https://github.com/CorgiTaco/Corgis-MultiLoader-Template/issues"
 [[mods]]
-modId="multiloader"
+modId="worldviewer"
 version="${file.jarVersion}" #mandatory
 displayName="Example Mod" #mandatory
 displayURL="https://github.com/CorgiTaco/Corgis-MultiLoader-Template" #optional

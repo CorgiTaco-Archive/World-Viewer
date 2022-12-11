@@ -3,6 +3,7 @@ package com.example.examplemod.platform.services;
 import com.example.examplemod.network.S2CPacket;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.nio.file.Path;
 import java.util.List;
 
 public interface IPlatformHelper {
@@ -21,6 +22,8 @@ public interface IPlatformHelper {
      * @return True if the mod is loaded, false otherwise.
      */
     boolean isModLoaded(String modId);
+
+    Path configDir();
 
     /**
      * Check if the game is currently in a development environment.
