@@ -22,9 +22,6 @@ subprojects {
     dependencies {
         compileOnly group:'com.google.auto.service', name:'auto-service', version:'1.0.1'
         annotationProcessor group:'com.google.auto.service', name:'auto-service', version:'1.0.1'
-        implementation "net.daporkchop.lib:common:0.5.7-SNAPSHOT"
-        implementation "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
-        implementation "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
     }
 
     jar {

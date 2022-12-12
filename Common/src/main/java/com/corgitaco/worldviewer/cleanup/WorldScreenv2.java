@@ -51,7 +51,7 @@ public class WorldScreenv2 extends Screen {
 
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, WorldScreen.StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
-    TileHandling tileHandling;
+    RenderTileManager renderTileManager;
 
     public WorldScreenv2(Component title) {
         super(title);
@@ -61,7 +61,7 @@ public class WorldScreenv2 extends Screen {
         computeStructureRenderers();
         setWorldArea();
 
-        this.tileHandling = new TileHandling(level, origin);
+        this.renderTileManager = new RenderTileManager(level, origin);
     }
 
     private void computeStructureRenderers() {
@@ -124,7 +124,7 @@ public class WorldScreenv2 extends Screen {
     @Override
     public void tick() {
         if (this.scrollCooldown < 0) {
-            this.tileHandling.tick(this);
+            this.renderTileManager.tick(this);
         }
 
         scrollCooldown--;
@@ -133,7 +133,7 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     public void onClose() {
-        this.tileHandling.close();
+        this.renderTileManager.close();
         super.onClose();
     }
 
@@ -144,7 +144,7 @@ public class WorldScreenv2 extends Screen {
         stack.scale(scale, scale, 0);
         GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
 
-        this.tileHandling.render(stack, mouseX, mouseY, partialTicks, this);
+        this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
         stack.popPose();
         super.render(stack, mouseX, mouseY, partialTicks);
     }
@@ -172,7 +172,7 @@ public class WorldScreenv2 extends Screen {
 
     private void cull() {
         setWorldArea();
-        this.tileHandling.cull(this);
+        this.renderTileManager.cull(this);
     }
 
 

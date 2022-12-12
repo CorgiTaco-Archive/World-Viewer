@@ -1,6 +1,7 @@
 package com.corgitaco.worldviewer.cleanup.storage;
 
 
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
@@ -32,6 +33,8 @@ public class DataTile {
 
     private final boolean isSlimeChunk;
 
+    private boolean needsSaving = false;
+
     public DataTile(long pos, DataTileManager tileManager, CompoundTag tag) {
         this.pos = pos;
         this.manager = tileManager;
@@ -54,6 +57,7 @@ public class DataTile {
         }
         {
             if (tag.contains("structures")) {
+                this.structures = new ObjectOpenHashSet<>();
                 ListTag structures = tag.getList("structures", Tag.TAG_STRING);
                 for (Tag value : structures) {
                     StringTag structure = (StringTag) value;
@@ -64,6 +68,7 @@ public class DataTile {
         }
 
         this.isSlimeChunk = tag.getBoolean("slimes");
+
     }
 
 
@@ -89,6 +94,7 @@ public class DataTile {
         if (height == Integer.MIN_VALUE) {
             height = this.manager.getHeightRaw(type, toWorldX(x), toWorldZ(z));
             heights[index] = height;
+            needsSaving = true;
         }
 
         return height;
@@ -96,6 +102,7 @@ public class DataTile {
 
     public Set<Holder<ConfiguredStructureFeature<?, ?>>> structures() {
         if (this.structures == null) {
+            needsSaving = true;
             this.structures = this.manager.getStructuresRaw(this.pos);
         }
         return this.structures;
@@ -117,6 +124,7 @@ public class DataTile {
             Holder<Biome> biomeRaw = this.manager.getBiomeRaw(toWorldX(x), toWorldZ(z));
             biomes[biomeIndex] = biomeRaw;
             biome = biomeRaw;
+            needsSaving = true;
         }
         return biome;
     }
@@ -190,5 +198,13 @@ public class DataTile {
 
     public Set<Holder<ConfiguredStructureFeature<?, ?>>> getStructures() {
         return structures;
+    }
+
+    public boolean isNeedsSaving() {
+        return needsSaving;
+    }
+
+    public void setNeedsSaving(boolean needsSaving) {
+        this.needsSaving = needsSaving;
     }
 }

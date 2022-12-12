@@ -3,8 +3,7 @@ package com.corgitaco.worldviewer.cleanup.storage;
 import com.corgitaco.worldviewer.mixin.IOWorkerAccessor;
 import com.example.examplemod.Constants;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import net.daporkchop.lib.primitive.common.strategy.hash.LongHashStrategy;
-import net.daporkchop.lib.primitive.map.concurrent.LongObjConcurrentCustomHashMap;
+import net.minecraft.Util;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
@@ -31,19 +30,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DataTileManager {
 
-    private final LongObjConcurrentCustomHashMap<DataTile> dataTiles = new LongObjConcurrentCustomHashMap<>(LongHashStrategy.def());
+    private final ConcurrentHashMap<Long, DataTile> dataTiles = new ConcurrentHashMap<>();
     private final Path saveDir;
     private final ChunkGenerator generator;
     private final BiomeSource source;
     private final ServerLevel serverLevel;
 
-    private final IOWorker fileStorage;
+    private final IOWorker ioWorker;
 
     private long worldSeed;
+
 
     public DataTileManager(Path saveDir, ChunkGenerator generator, BiomeSource source, ServerLevel serverLevel, long worldSeed) {
         this.saveDir = saveDir;
@@ -65,7 +68,7 @@ public class DataTileManager {
             throw new IllegalArgumentException("Path must be a directory");
         }
 
-        this.fileStorage = IOWorkerAccessor.makeStorage(saveDir, false, "data_tiles");
+        this.ioWorker = IOWorkerAccessor.makeStorage(saveDir, true, "data_tiles");
     }
 
     public ServerLevel serverLevel() {
@@ -171,13 +174,13 @@ public class DataTileManager {
 
         if (!this.dataTiles.containsKey(pos)) {
             try {
-                CompoundTag read = this.fileStorage.load(new ChunkPos(pos));
+                CompoundTag read = this.ioWorker.load(new ChunkPos(pos));
                 if (read == null) {
                     value = new DataTile(pos, this);
                 } else {
                     value = new DataTile(pos, this, read);
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 Constants.LOGGER.error("Couldn't read file for tile [%s, %s]. ".formatted(ChunkPos.getX(pos), ChunkPos.getZ(pos)) + e.getMessage());
                 value = new DataTile(pos, this);
             }
@@ -200,26 +203,37 @@ public class DataTileManager {
     public void unloadTile(long pos) {
         @Nullable DataTile remove = this.dataTiles.remove(pos);
         if (remove != null) {
-            save(remove);
+            if (remove.isNeedsSaving()) {
+                save(remove);
+            }
         }
     }
 
     private void save(@NotNull DataTile toSave) {
         CompoundTag save = toSave.save();
         long pos = toSave.getPos();
-        this.fileStorage.store(new ChunkPos(pos), save);
+        this.ioWorker.store(new ChunkPos(pos), save);
     }
 
-    public void saveAllTiles() {
-        this.dataTiles.forEach((pos, tile) -> save(tile));
+    public void saveAllTiles(boolean closeWorker) {
+        for (Map.Entry<Long, DataTile> data : this.dataTiles.entrySet()) {
+            DataTile value = data.getValue();
+            if (value.isNeedsSaving()) {
+                save(value);
+            }
+        }
+        // TODO: This is probably wrong, but we need to NOT block render thread when closing/saving all chunks bc it freezes the game.
+        CompletableFuture.runAsync(() -> {
+            this.ioWorker.synchronize(true).join();
+            try {
+                this.ioWorker.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }, Util.backgroundExecutor());
     }
 
     public void close() {
-        saveAllTiles();
-        try {
-            this.fileStorage.close();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        saveAllTiles(true);
     }
 }

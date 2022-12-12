@@ -13,22 +13,20 @@ import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
-import org.jetbrains.annotations.NotNull;
 
 public class BiomeLayer extends TileLayer {
 
-    private final DynamicTexture biomes;
+    private final int[][] colorData;
+
+    private DynamicTexture lazy;
 
     public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.biomes = new DynamicTexture(buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution));
+        this.colorData = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution);
     }
 
-
-    @NotNull
-    private static NativeImage buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution) {
-        NativeImage image = new NativeImage(size, size, true);
-        boolean heightColoring = false;
+    private static int[][] buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution) {
+        int[][] colorData = new int[size][size];
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
@@ -53,24 +51,28 @@ public class BiomeLayer extends TileLayer {
 
                             return NativeImage.combine(255, b, g, r);
                         });
-
-                        color = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, tileManager.serverLevel()));
-                        image.setPixelRGBA(dataX, dataZ, color);
+                        colorData[dataX][dataZ] = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, tileManager.serverLevel()));
                     }
                 }
             }
         }
-        return image;
+        return colorData;
     }
 
     @Override
     public DynamicTexture getImage() {
-        return this.biomes;
+        if (lazy == null) {
+            this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+        }
+        return this.lazy;
     }
 
     @Override
     public void close() {
-        this.biomes.close();
+        super.close();
+        if (lazy != null) {
+            this.lazy.close();
+        }
     }
 
 

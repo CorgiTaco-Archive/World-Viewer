@@ -1,43 +1,37 @@
 package com.corgitaco.worldviewer.cleanup;
 
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
-import com.corgitaco.worldviewer.cleanup.tile.TileV2;
+import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.longs.*;
+import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.*;
 
-import static com.example.examplemod.util.LongPackingUtil.getTileX;
-import static com.example.examplemod.util.LongPackingUtil.getTileZ;
-
-public class TileHandling {
+public class RenderTileManager {
     private final ExecutorService executorService = createExecutor();
 
-    private final Long2ObjectLinkedOpenHashMap<CompletableFuture<TileV2>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
+    private final Long2ObjectLinkedOpenHashMap<CompletableFuture<RenderTile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
     private final ServerLevel level;
     private final BlockPos origin;
 
-    public LongList tilesToSubmit = new LongArrayList();
-
-    public final Set<TileV2> tiles = ConcurrentHashMap.newKeySet();
+    public final Map<Long, RenderTile> rendering = new ConcurrentHashMap<>();
 
     public int submittedTaskCoolDown = 0;
 
-    private final LongSet submitted = new LongOpenHashSet();
-    private final LongSet submittedForGeneration = new LongOpenHashSet();
-
     private final DataTileManager tileManager;
 
-    public TileHandling(ServerLevel level, BlockPos origin) {
+    public RenderTileManager(ServerLevel level, BlockPos origin) {
         this.level = level;
         this.origin = origin;
         tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())),level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
@@ -45,42 +39,37 @@ public class TileHandling {
 
     public void tick(WorldScreenv2 worldScreenv2) {
         long originTile = worldScreenv2.tileKey(this.origin);
-
         int xTileRange = worldScreenv2.getXTileRange();
         int zTileRange = worldScreenv2.getZTileRange();
 
-        for (int x = -xTileRange; x <= xTileRange; x++) {
-            for (int z = -zTileRange; z <= zTileRange; z++) {
-                int worldTileX = getTileX(originTile) + x;
-                int worldTileZ = getTileZ(originTile) + z;
-                long worldTile = LongPackingUtil.tileKey(worldTileX, worldTileZ);
-                if (submitted.add(worldTile)) {
-                    tilesToSubmit.add(worldTile);
+        int slices = 360;
+        double sliceSize = Mth.TWO_PI / slices;
+
+        int tileRange = Math.max(xTileRange, zTileRange) + 2;
+        for (int tileDistanceFromOrigin = 0; tileDistanceFromOrigin <= tileRange; tileDistanceFromOrigin++) {
+
+            int originWorldX = worldScreenv2.getWorldXFromTileKey(originTile);
+            int originWorldZ = worldScreenv2.getWorldZFromTileKey(originTile);
+            double distance = worldScreenv2.tileSize * tileDistanceFromOrigin;
+
+            for (int i = 0; i < slices; i++) {
+                double angle = i * sliceSize;
+                int worldTileX = (int) Math.round(originWorldX + (Math.sin(angle) * distance));
+                int worldTileZ = (int) Math.round(originWorldZ + (Math.cos(angle) * distance));
+                long tilePos = LongPackingUtil.tileKey(worldScreenv2.blockToTile(worldTileX), worldScreenv2.blockToTile(worldTileZ));
+                if (!rendering.containsKey(tilePos)) {
+                    trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
+                        var x = worldScreenv2.getWorldXFromTileKey(tilePos);
+                        var z = worldScreenv2.getWorldZFromTileKey(tilePos);
+
+                        RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                        rendering.put(tilePos, renderTile);
+                        return renderTile;
+                    }, executorService));
                 }
             }
         }
 
-        if (submittedTaskCoolDown >= 0) {
-            int tilesPerThreadCount = tilesToSubmit.size();
-            int to = Math.min(tilesToSubmit.size(), tilesPerThreadCount);
-            LongList tilePositions = tilesToSubmit.subList(0, to);
-
-            for (long tilePos : tilePositions) {
-                if (submittedForGeneration.contains(tilePos)) {
-                    continue;
-                }
-                submittedForGeneration.add(tilePos);
-                trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
-                    var x = worldScreenv2.getWorldXFromTileKey(tilePos);
-                    var z = worldScreenv2.getWorldZFromTileKey(tilePos);
-
-                    TileV2 tileV2 = new TileV2(this.tileManager,  TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
-                    tiles.add(tileV2);
-                    return tileV2;
-                }, executorService));
-            }
-            this.tilesToSubmit.removeElements(0, to);
-        }
 
         LongSet toRemove = new LongOpenHashSet();
         trackedTileFutures.forEach((tilePos, future) -> {
@@ -93,15 +82,14 @@ public class TileHandling {
             if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
                 future.cancel(true);
                 toRemove.add(tilePos);
-                this.submitted.remove(tilePos);
             }
         });
         toRemove.forEach(this.trackedTileFutures::remove);
     }
 
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTicks, WorldScreenv2 worldScreenv2) {
-        ArrayList<TileV2> tileV2s = new ArrayList<>(this.tiles);
-        for (TileV2 tileToRender : tileV2s) {
+        ArrayList<RenderTile> renderTiles = new ArrayList<>(this.rendering.values());
+        for (RenderTile tileToRender : renderTiles) {
 
             int localX = worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
             int localZ = worldScreenv2.getLocalZFromWorldZ(tileToRender.getTileWorldZ());
@@ -115,25 +103,24 @@ public class TileHandling {
     }
 
     public void cull(WorldScreenv2 worldScreenv2) {
-        this.tiles.removeIf(tile -> {
+
+        LongSet toRemove = new LongOpenHashSet();
+        this.rendering.forEach((pos, tile) -> {
             int x = tile.getTileWorldX();
             int z = tile.getTileWorldZ();
             if (!worldScreenv2.worldViewArea.intersects(x, z, x, z)) {
                 tile.close();
-                long tileKey = LongPackingUtil.tileKey(worldScreenv2.blockToTile(x), worldScreenv2.blockToTile(z));
-                submitted.remove(tileKey);
-                submittedForGeneration.remove(tileKey);
-                return true;
+                toRemove.add(pos);
             }
-
-            return false;
         });
+
+        toRemove.forEach(rendering::remove);
     }
 
     public void close() {
         this.executorService.shutdownNow();
-        this.tiles.forEach(TileV2::close);
-        this.tiles.clear();
+        this.rendering.forEach((pos, tile) -> tile.close());
+        this.rendering.clear();
         this.tileManager.close();
     }
 

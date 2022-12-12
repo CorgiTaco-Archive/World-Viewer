@@ -15,7 +15,7 @@ import net.minecraft.world.level.ChunkPos;
 import java.util.*;
 import java.util.function.LongConsumer;
 
-public class TileV2 {
+public class RenderTile {
 
 
     private final HashMap<String, TileLayer> tileLayers = new HashMap<>();
@@ -24,7 +24,7 @@ public class TileV2 {
     private final int tileWorldZ;
     private final int size;
 
-    public TileV2(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
+    public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
         this.tileManager = tileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;

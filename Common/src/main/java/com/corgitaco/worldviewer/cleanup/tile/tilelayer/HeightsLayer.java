@@ -2,8 +2,7 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
-import com.corgitaco.worldviewer.cleanup.tile.TileV2;
-import com.mojang.blaze3d.platform.NativeImage;
+import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.FastColor;
@@ -16,13 +15,16 @@ import java.util.Collection;
 
 public class HeightsLayer extends TileLayer {
 
-    private final DynamicTexture heights;
+    @Nullable
+    private DynamicTexture lazy;
 
+    private final int[][] colorData;
 
     public HeightsLayer(DataTileManager tileManager, int y, int worldX, int worldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, worldX, worldZ, size, sampleResolution, screen);
 
-        NativeImage image = new NativeImage(size, size, true);
+
+        colorData = new int[size][size];
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
@@ -37,27 +39,37 @@ public class HeightsLayer extends TileLayer {
                     for (int z = 0; z < sampleResolution; z++) {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
-                        image.setPixelRGBA(dataX, dataZ, grayScale);
+                        colorData[dataX][dataZ] = grayScale;
                     }
                 }
             }
         }
-        this.heights = new DynamicTexture(image);
     }
 
     public static int getGrayScale(int y, LevelHeightAccessor heightAccessor) {
-        float pct = Mth.clamp(Mth.inverseLerp(y, heightAccessor.getMinBuildHeight(), heightAccessor.getHeight()), 0, 1F);
-        int color = Math.round(Mth.clampedLerp(128, 255, pct));
+        float pct = Mth.clamp(Mth.inverseLerp(y, 63, 255), 0, 1F);
+        int color = Math.round(Mth.clampedLerp(127, 255, pct));
         return FastColor.ARGB32.color(255, color, color, color);
     }
 
     @Override
-    public boolean canRender(TileV2 tileV2, Collection<String> currentlyRendering) {
+    public boolean canRender(RenderTile renderTile, Collection<String> currentlyRendering) {
         return !currentlyRendering.contains("biomes");
     }
 
     @Override
     public @Nullable DynamicTexture getImage() {
-        return this.heights;
+        if (lazy == null) {
+            this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+        }
+        return this.lazy;
+    }
+
+    @Override
+    public void close() {
+        super.close();
+        if (lazy != null) {
+            this.lazy.close();
+        }
     }
 }

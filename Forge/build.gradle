@@ -46,6 +46,7 @@ archivesBaseName = "${mod_name}-forge-${minecraft_version}"
 shadowJar {
     configurations = [project.configurations.shadow]
     relocate 'blue.endless.jankson', "${project.group}.shadow.blue.endless.jankson"
+    relocate 'net.daporkchop.lib', "${project.group}.net.daporkchop.lib"
     archiveClassifier = ''
 }
 reobf {
@@ -145,15 +146,21 @@ dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     library shadow("blue.endless:jankson:${jankson_version}")
 
-//    implementation fg.deobf("curse.maven:tf-227639:3901400")
-//    implementation fg.deobf("curse.maven:terraf-363820:3811021")
-//    implementation fg.deobf("curse.maven:undergarden-379849:3810810")
-//    implementation fg.deobf("curse.maven:tfc-302973:3943694")
-//    implementation fg.deobf("curse.maven:patchouli-306770:3846086")
+    implementation fg.deobf("curse.maven:tf-227639:3901400")
+    implementation fg.deobf("curse.maven:terraf-363820:3811021")
+    implementation fg.deobf("curse.maven:undergarden-379849:3810810")
+    implementation fg.deobf("curse.maven:tfc-302973:3943694")
+    implementation fg.deobf("curse.maven:patchouli-306770:3846086")
 
-    library shadow("net.daporkchop.lib:common:0.5.7-SNAPSHOT")
-    library shadow("net.daporkchop.lib:primitive:0.5.7-SNAPSHOT")
-    library shadow("net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT")
+    library shadow("net.daporkchop.lib:common:0.5.7-SNAPSHOT") {
+        transitive = false
+    }
+    library shadow("net.daporkchop.lib:primitive:0.5.7-SNAPSHOT") {
+        transitive = false
+    }
+    library shadow("net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT") {
+        transitive = false
+    }
 }
 
 reg.configureJarTask(shadowJar)

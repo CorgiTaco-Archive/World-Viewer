@@ -64,6 +64,9 @@ dependencies {
     include implementation("com.electronwill.night-config:core:${nightconfig_version}")
     shadow("blue.endless:jankson:${jankson_version}")
 
+    shadow("net.daporkchop.lib:common:0.5.7-SNAPSHOT")
+    shadow("net.daporkchop.lib:primitive:0.5.7-SNAPSHOT")
+    shadow("net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT")
 
     modImplementation "curse.maven:starlight-521783:3667443"
     modImplementation "curse.maven:cyanide-543444:3757528"

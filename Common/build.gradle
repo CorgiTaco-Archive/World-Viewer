@@ -29,6 +29,10 @@ dependencies {
     compileOnly("org.ow2.asm:asm-tree:9.2")
     compileOnly("com.electronwill.night-config:toml:${nightconfig_version}")
     compileOnly("blue.endless:jankson:${jankson_version}")
+
+    compileOnly "net.daporkchop.lib:common:0.5.7-SNAPSHOT"
+    compileOnly "net.daporkchop.lib:primitive:0.5.7-SNAPSHOT"
+    compileOnly "net.daporkchop.lib:concurrent:0.5.7-SNAPSHOT"
 }
 
 processResources {
