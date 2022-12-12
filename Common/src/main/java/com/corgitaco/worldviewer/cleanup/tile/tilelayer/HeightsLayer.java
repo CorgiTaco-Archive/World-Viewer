@@ -47,7 +47,7 @@ public class HeightsLayer extends TileLayer {
     }
 
     public static int getGrayScale(int y, LevelHeightAccessor heightAccessor) {
-        float pct = Mth.clamp(Mth.inverseLerp(y, 63, 255), 0, 1F);
+        float pct = Mth.clamp(Mth.inverseLerp(y, 0, 255), 0, 1F);
         int color = Math.round(Mth.clampedLerp(127, 255, pct));
         return FastColor.ARGB32.color(255, color, color, color);
     }

@@ -1,9 +1,9 @@
 package com.corgitaco.worldviewer.cleanup.storage;
 
+import com.corgitaco.worldviewer.cleanup.RenderTileManager;
 import com.corgitaco.worldviewer.mixin.IOWorkerAccessor;
 import com.example.examplemod.Constants;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import net.minecraft.Util;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
@@ -34,8 +34,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 
 public class DataTileManager {
+
+    private static final ExecutorService SAVE_THREAD = RenderTileManager.createExecutor(1);
 
     private final ConcurrentHashMap<Long, DataTile> dataTiles = new ConcurrentHashMap<>();
     private final Path saveDir;
@@ -43,7 +46,7 @@ public class DataTileManager {
     private final BiomeSource source;
     private final ServerLevel serverLevel;
 
-    private final IOWorker ioWorker;
+    private static IOWorker ioWorker;
 
     private long worldSeed;
 
@@ -68,7 +71,9 @@ public class DataTileManager {
             throw new IllegalArgumentException("Path must be a directory");
         }
 
-        this.ioWorker = IOWorkerAccessor.makeStorage(saveDir, true, "data_tiles");
+        if (ioWorker == null) {
+            ioWorker = IOWorkerAccessor.makeStorage(saveDir, true, "data_tiles");
+        }
     }
 
     public ServerLevel serverLevel() {
@@ -174,7 +179,7 @@ public class DataTileManager {
 
         if (!this.dataTiles.containsKey(pos)) {
             try {
-                CompoundTag read = this.ioWorker.load(new ChunkPos(pos));
+                CompoundTag read = ioWorker.load(new ChunkPos(pos));
                 if (read == null) {
                     value = new DataTile(pos, this);
                 } else {
@@ -212,7 +217,7 @@ public class DataTileManager {
     private void save(@NotNull DataTile toSave) {
         CompoundTag save = toSave.save();
         long pos = toSave.getPos();
-        this.ioWorker.store(new ChunkPos(pos), save);
+        ioWorker.store(new ChunkPos(pos), save);
     }
 
     public void saveAllTiles(boolean closeWorker) {
@@ -224,13 +229,8 @@ public class DataTileManager {
         }
         // TODO: This is probably wrong, but we need to NOT block render thread when closing/saving all chunks bc it freezes the game.
         CompletableFuture.runAsync(() -> {
-            this.ioWorker.synchronize(true).join();
-            try {
-                this.ioWorker.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }, Util.backgroundExecutor());
+            ioWorker.synchronize(true).join();
+        }, SAVE_THREAD);
     }
 
     public void close() {

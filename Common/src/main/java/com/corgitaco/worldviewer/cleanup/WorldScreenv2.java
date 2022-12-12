@@ -20,7 +20,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -56,7 +55,7 @@ public class WorldScreenv2 extends Screen {
     public WorldScreenv2(Component title) {
         super(title);
         IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        this.level = server.getLevel(Level.OVERWORLD);
+        this.level = server.getLevel(Minecraft.getInstance().level.dimension());
         this.origin = new BlockPos.MutableBlockPos().set(Minecraft.getInstance().player.blockPosition());
         computeStructureRenderers();
         setWorldArea();

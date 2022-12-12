@@ -45,6 +45,7 @@ public class RenderTile {
 
         });
         Constants.LOGGER.info("Created tile %s,%s in %sms (%s) for tile size of %s blocks & sample resolution of 1/%s blocks.".formatted(tileWorldX, tileWorldZ, (System.currentTimeMillis() - beforeMs), factoryTimings.toString(), size, sampleRes));
+        forEachChunkPos(tileManager::unloadTile);
     }
 
 

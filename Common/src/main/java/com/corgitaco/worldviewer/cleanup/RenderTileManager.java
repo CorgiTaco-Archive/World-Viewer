@@ -48,24 +48,26 @@ public class RenderTileManager {
         int tileRange = Math.max(xTileRange, zTileRange) + 2;
         for (int tileDistanceFromOrigin = 0; tileDistanceFromOrigin <= tileRange; tileDistanceFromOrigin++) {
 
-            int originWorldX = worldScreenv2.getWorldXFromTileKey(originTile);
-            int originWorldZ = worldScreenv2.getWorldZFromTileKey(originTile);
+            int originWorldX = worldScreenv2.getWorldXFromTileKey(originTile) + (worldScreenv2.tileSize / 2);
+            int originWorldZ = worldScreenv2.getWorldZFromTileKey(originTile) + (worldScreenv2.tileSize / 2);
             double distance = worldScreenv2.tileSize * tileDistanceFromOrigin;
 
             for (int i = 0; i < slices; i++) {
                 double angle = i * sliceSize;
                 int worldTileX = (int) Math.round(originWorldX + (Math.sin(angle) * distance));
                 int worldTileZ = (int) Math.round(originWorldZ + (Math.cos(angle) * distance));
-                long tilePos = LongPackingUtil.tileKey(worldScreenv2.blockToTile(worldTileX), worldScreenv2.blockToTile(worldTileZ));
-                if (!rendering.containsKey(tilePos)) {
-                    trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
-                        var x = worldScreenv2.getWorldXFromTileKey(tilePos);
-                        var z = worldScreenv2.getWorldZFromTileKey(tilePos);
+                if (worldScreenv2.worldViewArea.intersects(worldTileX, worldTileZ, worldTileX, worldTileZ)) {
+                    long tilePos = LongPackingUtil.tileKey(worldScreenv2.blockToTile(worldTileX), worldScreenv2.blockToTile(worldTileZ));
+                    if (!rendering.containsKey(tilePos)) {
+                        trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
+                            var x = worldScreenv2.getWorldXFromTileKey(tilePos);
+                            var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                        RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
-                        rendering.put(tilePos, renderTile);
-                        return renderTile;
-                    }, executorService));
+                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                            rendering.put(tilePos, renderTile);
+                            return renderTile;
+                        }, executorService));
+                    }
                 }
             }
         }
@@ -73,6 +75,14 @@ public class RenderTileManager {
 
         LongSet toRemove = new LongOpenHashSet();
         trackedTileFutures.forEach((tilePos, future) -> {
+            if (future.isCompletedExceptionally()) {
+                try{
+                    future.getNow(null);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
             if (future.isDone()) {
                 toRemove.add(tilePos);
             }
