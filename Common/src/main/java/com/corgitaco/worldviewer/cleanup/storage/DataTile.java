@@ -17,14 +17,13 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-//TODO: Add structures.
 public class DataTile {
 
     private static final int SIZE = 16;
 
     private final Map<Heightmap.Types, int[]> heights = new EnumMap<>(Heightmap.Types.class);
 
-    private final Holder<Biome>[] biomes = new Holder[QuartPos.fromBlock(SIZE)];
+    private final DataTileBiomeStorage biomes;
 
     private Set<Holder<ConfiguredStructureFeature<?, ?>>> structures = null;
 
@@ -46,14 +45,8 @@ public class DataTile {
             }
         }
         {
-            ListTag biomes = tag.getList("biomes", Tag.TAG_STRING);
-            for (int i = 0; i < biomes.size(); i++) {
-                StringTag biome = (StringTag) biomes.get(i);
-                Optional<Holder<Biome>> holder = tileManager.serverLevel().registryAccess().registryOrThrow(Registry.BIOME_REGISTRY).getHolder(ResourceKey.create(Registry.BIOME_REGISTRY, new ResourceLocation(biome.getAsString())));
-                if (holder.isPresent()) {
-                    this.biomes[i] = holder.get();
-                }
-            }
+            Registry<Biome> biomeRegistry = tileManager.serverLevel().registryAccess().registryOrThrow(Registry.BIOME_REGISTRY);
+            this.biomes = new DataTileBiomeStorage(tag.getCompound("biomes"), biomeRegistry);
         }
         {
             if (tag.contains("structures")) {
@@ -75,6 +68,7 @@ public class DataTile {
     public DataTile(long pos, DataTileManager manager) {
         this.pos = pos;
         this.manager = manager;
+        this.biomes = new DataTileBiomeStorage();
         this.isSlimeChunk = manager.isSlimeChunkRaw(ChunkPos.getX(pos), ChunkPos.getZ(pos));
     }
 
@@ -118,15 +112,10 @@ public class DataTile {
         x = QuartPos.toBlock(x);
         z = QuartPos.toBlock(z);
 
-        int biomeIndex = getBiomeIndex(x, z);
-        Holder<Biome> biome = biomes[biomeIndex];
-        if (biome == null) {
-            Holder<Biome> biomeRaw = this.manager.getBiomeRaw(toWorldX(x), toWorldZ(z));
-            biomes[biomeIndex] = biomeRaw;
-            biome = biomeRaw;
-            needsSaving = true;
-        }
-        return biome;
+        return this.biomes.getBiome(x, z, (x1, z1) -> {
+            this.needsSaving = true;
+            return this.manager.getBiomeRaw(toWorldX(x1), toWorldZ(z1));
+        });
     }
 
     private static int getIndex(int x, int z) {
@@ -173,14 +162,8 @@ public class DataTile {
     }
 
     @NotNull
-    private ListTag saveBiomes() {
-        ListTag biomes = new ListTag();
-
-        for (Holder<Biome> biome : this.biomes) {
-            String biomeId = biome == null ? "null" : biome.unwrapKey().orElseThrow().location().toString();
-            biomes.add(StringTag.valueOf(biomeId));
-        }
-        return biomes;
+    private CompoundTag saveBiomes() {
+        return biomes.save();
     }
 
     @NotNull

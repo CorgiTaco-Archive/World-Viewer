@@ -19,7 +19,7 @@ public abstract class TileLayer {
 
     public static final Map<String, Factory> FACTORY_REGISTRY = Util.make(new LinkedHashMap<>(), map -> {
         map.put("heights", HeightsLayer::new);
-//        map.put("biomes", BiomeLayer::new);
+        map.put("biomes", BiomeLayer::new);
 //        map.put("slime_chunks", SlimeChunkLayer::new);
 //        map.put("structures", StructuresLayer::new);
     });
