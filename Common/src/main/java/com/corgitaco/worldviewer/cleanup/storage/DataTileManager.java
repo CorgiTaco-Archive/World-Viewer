@@ -5,6 +5,7 @@ import com.corgitaco.worldviewer.mixin.IOWorkerAccessor;
 import com.example.examplemod.Constants;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.core.Holder;
+import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
@@ -85,7 +86,7 @@ public class DataTileManager {
     }
 
     public Holder<Biome> getBiomeRaw(int worldX, int worldZ) {
-        return this.source.getNoiseBiome(worldX, 0, worldZ, this.generator.climateSampler());
+        return this.source.getNoiseBiome(QuartPos.fromBlock(worldX), QuartPos.fromBlock(63), QuartPos.fromBlock(worldZ), this.generator.climateSampler());
     }
 
     public boolean isSlimeChunkRaw(int chunkX, int chunkZ) {

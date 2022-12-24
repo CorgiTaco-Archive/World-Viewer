@@ -107,18 +107,18 @@ public class DataTile {
     }
 
     public Holder<Biome> getBiome(int x, int z) {
-        x = x & (SIZE - 1);
-        z = z & (SIZE - 1);
+        int storageX = x & (SIZE - 1);
+        int storageZ = z & (SIZE - 1);
+        storageX = QuartPos.fromBlock(storageX);
+        storageZ = QuartPos.fromBlock(storageZ);
 
-        x = QuartPos.fromBlock(x);
-        z = QuartPos.fromBlock(z);
+        storageX = QuartPos.toBlock(storageX);
+        storageZ = QuartPos.toBlock(storageZ);
 
-        x = QuartPos.toBlock(x);
-        z = QuartPos.toBlock(z);
 
-        return this.biomes.getBiome(x, z, (x1, z1) -> {
+        return this.biomes.getBiome(storageX, storageZ, (x1, z1) -> {
             this.needsSaving = true;
-            return this.manager.getBiomeRaw(toWorldX(x1), toWorldZ(z1));
+            return this.manager.getBiomeRaw(x, z);
         });
     }
 
