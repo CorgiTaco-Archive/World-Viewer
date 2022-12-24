@@ -6,6 +6,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,6 +16,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -39,7 +42,7 @@ public class WorldScreenv2 extends Screen {
     int tileSize = tileToBlock(1);
 
 
-    public final BlockPos.MutableBlockPos origin;
+    public final BlockPos.MutableBlockPos origin = new BlockPos.MutableBlockPos();
 
     float scale = 0.5F;
     public ServerLevel level;
@@ -54,13 +57,6 @@ public class WorldScreenv2 extends Screen {
 
     public WorldScreenv2(Component title) {
         super(title);
-        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
-        this.level = server.getLevel(Minecraft.getInstance().level.dimension());
-        this.origin = new BlockPos.MutableBlockPos().set(Minecraft.getInstance().player.blockPosition());
-        computeStructureRenderers();
-        setWorldArea();
-
-        this.renderTileManager = new RenderTileManager(level, origin);
     }
 
     private void computeStructureRenderers() {
@@ -117,6 +113,13 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     protected void init() {
+        IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+        this.level = server.getLevel(Minecraft.getInstance().level.dimension());
+        this.origin.set(Minecraft.getInstance().player.blockPosition());
+        computeStructureRenderers();
+        setWorldArea();
+
+        this.renderTileManager = new RenderTileManager(level, origin);
         super.init();
     }
 
@@ -144,8 +147,64 @@ public class WorldScreenv2 extends Screen {
         GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
 
         this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
+
+
+        drawGrid(stack);
+
+
         stack.popPose();
         super.render(stack, mouseX, mouseY, partialTicks);
+    }
+
+    private void drawGrid(PoseStack stack) {
+        int gridColor = FastColor.ARGB32.color(100, 255, 255, 255);
+        long originTile = tileKey(this.origin);
+        int lineWidth = (int) Math.ceil(0.3 / scale);
+
+        int xTileRange = getXTileRange();
+        int xIncrement = 1;
+
+        for (int x = -xTileRange; x < xTileRange; x += xIncrement) {
+            int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(getTileX(originTile) + x));
+            GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
+        }
+
+
+        int zTileRange = getZTileRange();
+        int increment = 1;
+        for (int z = -zTileRange; z < zTileRange; z += increment) {
+            int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(getTileZ(originTile) + z));
+            GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
+        }
+
+        renderCoordinates(stack, originTile, xTileRange, zTileRange);
+    }
+
+    private void renderCoordinates(PoseStack stack, long originTile, int xTileRange, int zTileRange) {
+        for (int x = -xTileRange; x < xTileRange; x++) {
+            for (int z = -zTileRange; z < zTileRange; z++) {
+                int worldX = tileToBlock(getTileX(originTile) + x);
+                int worldZ = tileToBlock(getTileZ(originTile) + z);
+
+                int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
+                int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
+
+                String formatted = "x%s,z%s".formatted(worldX, worldZ);
+                MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
+
+                int textWidth = Minecraft.getInstance().font.width(component);
+                float scale = Math.min((1F / this.scale) * 0.6F, 4);
+
+                float fontRenderX = xScreenPos - ((textWidth / 2F) * scale);
+                float fontRenderZ = zScreenPos - (Minecraft.getInstance().font.lineHeight * scale);
+
+                stack.pushPose();
+                stack.translate(fontRenderX, fontRenderZ, 0);
+                stack.scale(scale, scale, scale);
+                Minecraft.getInstance().font.drawShadow(stack, component, 0, 0, FastColor.ARGB32.color(255, 255, 255, 255));
+                stack.popPose();
+            }
+        }
     }
 
     @Override

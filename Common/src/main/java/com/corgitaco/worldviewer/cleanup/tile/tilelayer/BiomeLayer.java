@@ -122,6 +122,10 @@ public class BiomeLayer extends TileLayer {
         map.put(Biomes.STONY_PEAKS, tryParseColor("0xC0C0C0"));
         map.put(Biomes.JAGGED_PEAKS, tryParseColor("0x969696"));
         map.put(Biomes.GROVE, tryParseColor("0x42FFBa"));
+        map.put(Biomes.SOUL_SAND_VALLEY, tryParseColor("0x964B00"));
+        map.put(Biomes.WARPED_FOREST, tryParseColor("0x89cff0"));
+        map.put(Biomes.BASALT_DELTAS, tryParseColor("0x5A5A5A"));
+        map.put(Biomes.CRIMSON_FOREST, tryParseColor("0xDC143C"));
     });
 
 

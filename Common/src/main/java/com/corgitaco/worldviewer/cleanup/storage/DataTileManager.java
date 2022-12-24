@@ -209,7 +209,7 @@ public class DataTileManager {
         @Nullable DataTile remove = this.dataTiles.remove(pos);
         if (remove != null) {
             if (remove.isNeedsSaving()) {
-                save(remove);
+//                save(remove);
             }
         }
     }

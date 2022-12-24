@@ -1,5 +1,6 @@
 package com.corgitaco.worldviewer.client;
 
+import com.corgitaco.worldviewer.cleanup.tile.tilelayer.BiomeLayer;
 import com.corgitaco.worldviewer.mixin.KeyMappingAccess;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -12,7 +13,6 @@ import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMaps;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
-import net.minecraft.Util;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
@@ -37,7 +37,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -129,53 +128,6 @@ public final class WorldScreen extends Screen {
 
         var random = level.random;
 
-        Object2IntOpenHashMap<ResourceKey<Biome>> colors = Util.make(new Object2IntOpenHashMap<>(), map1 -> {
-            map1.put(Biomes.BADLANDS, parseColor("D94515"));
-            map1.put(Biomes.BAMBOO_JUNGLE, parseColor("2C4205"));
-            map1.put(Biomes.BEACH, parseColor("FADE55"));
-            map1.put(Biomes.DESERT, parseColor("FA9418"));
-            map1.put(Biomes.BIRCH_FOREST, parseColor("307444"));
-            map1.put(Biomes.PLAINS, parseColor("8DB360"));
-            map1.put(Biomes.WINDSWEPT_HILLS, parseColor("606060"));
-            map1.put(Biomes.FOREST, parseColor("056621"));
-            map1.put(Biomes.TAIGA, parseColor("0B6659"));
-            map1.put(Biomes.SWAMP, parseColor("07F9B2"));
-            map1.put(Biomes.RIVER, parseColor("0000FF"));
-            map1.put(Biomes.NETHER_WASTES, parseColor("FF0000"));
-            map1.put(Biomes.THE_VOID, parseColor("8080FF"));
-            map1.put(Biomes.FROZEN_RIVER, parseColor("A0A0A0"));
-            map1.put(Biomes.SNOWY_PLAINS, parseColor("FFFFFF"));
-            map1.put(Biomes.MUSHROOM_FIELDS, parseColor("FF00FF"));
-            map1.put(Biomes.JUNGLE, parseColor("537B09"));
-            map1.put(Biomes.SPARSE_JUNGLE, parseColor("628B17"));
-            map1.put(Biomes.STONY_SHORE, parseColor("A2A284"));
-            map1.put(Biomes.SNOWY_BEACH, parseColor("FAF0C0"));
-            map1.put(Biomes.DARK_FOREST, parseColor("40511A"));
-            map1.put(Biomes.SNOWY_TAIGA, parseColor("31554A"));
-            map1.put(Biomes.OLD_GROWTH_PINE_TAIGA, parseColor("596651"));
-            map1.put(Biomes.OLD_GROWTH_SPRUCE_TAIGA, parseColor("818E79"));
-            map1.put(Biomes.SAVANNA, parseColor("BDB25F"));
-            map1.put(Biomes.SAVANNA_PLATEAU, parseColor("A79D24"));
-            map1.put(Biomes.WOODED_BADLANDS, parseColor("CA8C65"));
-            map1.put(Biomes.ERODED_BADLANDS, parseColor("FF6D3D"));
-            map1.put(Biomes.SUNFLOWER_PLAINS, parseColor("B5DB88"));
-            map1.put(Biomes.FLOWER_FOREST, parseColor("2D8E49"));
-            map1.put(Biomes.ICE_SPIKES, parseColor("B4DCDC"));
-            map1.put(Biomes.OCEAN, parseColor("000070"));
-            map1.put(Biomes.DEEP_OCEAN, parseColor("000030"));
-            map1.put(Biomes.COLD_OCEAN, parseColor("0056d6"));
-            map1.put(Biomes.DEEP_COLD_OCEAN, parseColor("004ecc"));
-            map1.put(Biomes.LUKEWARM_OCEAN, parseColor("45ADF2"));
-            map1.put(Biomes.DEEP_LUKEWARM_OCEAN, parseColor("3BA3E8"));
-            map1.put(Biomes.FROZEN_OCEAN, parseColor("9090A0"));
-            map1.put(Biomes.DEEP_FROZEN_OCEAN, parseColor("676791"));
-            map1.put(Biomes.FROZEN_PEAKS, parseColor("8BC0FC"));
-            map1.put(Biomes.WINDSWEPT_SAVANNA, parseColor("E5DA87"));
-            map1.put(Biomes.WINDSWEPT_FOREST, parseColor("589C6C"));
-            map1.put(Biomes.STONY_PEAKS, parseColor("C0C0C0"));
-            map1.put(Biomes.JAGGED_PEAKS, parseColor("969696"));
-            map1.put(Biomes.GROVE, parseColor("42FFBa"));
-        });
 
         level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().forEach(holder -> {
 
@@ -191,7 +143,7 @@ public final class WorldScreen extends Screen {
             int b = (int) Mth.clampedLerp(240, 0, lerp);
 
             int randomColor = FastColor.ARGB32.color(255, r, g, b);
-            map.put(holder, colors.getOrDefault(holder.unwrapKey().orElseThrow(), randomColor));
+            map.put(holder, BiomeLayer.COLORS.getOrDefault(holder.unwrapKey().orElseThrow(), randomColor));
         });
 
         computeStructureRenderers();

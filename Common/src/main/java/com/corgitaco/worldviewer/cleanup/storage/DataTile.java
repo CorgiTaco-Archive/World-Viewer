@@ -15,13 +15,17 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DataTile {
 
     private static final int SIZE = 16;
 
-    private final Map<Heightmap.Types, int[]> heights = new EnumMap<>(Heightmap.Types.class);
+    private final ConcurrentHashMap<Heightmap.Types, int[]> heights = new ConcurrentHashMap<>(new EnumMap<>(Heightmap.Types.class));
 
     private final DataTileBiomeStorage biomes;
 

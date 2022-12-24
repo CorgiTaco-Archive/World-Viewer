@@ -63,7 +63,7 @@ public class RenderTileManager {
                             var x = worldScreenv2.getWorldXFromTileKey(tilePos);
                             var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY.get(), 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
                             rendering.put(tilePos, renderTile);
                             return renderTile;
                         }, executorService));
@@ -79,7 +79,8 @@ public class RenderTileManager {
                 try{
                     future.getNow(null);
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    e.printStackTrace();
+//                    throw new RuntimeException(e);
                 }
             }
 
