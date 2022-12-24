@@ -6,6 +6,7 @@ import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Vector3f;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -15,6 +16,7 @@ import net.minecraft.util.Mth;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -22,6 +24,7 @@ public class RenderTileManager {
     private final ExecutorService executorService = createExecutor();
 
     private final Long2ObjectLinkedOpenHashMap<CompletableFuture<RenderTile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
+    private WorldScreenv2 worldScreenv2;
     private final ServerLevel level;
     private final BlockPos origin;
 
@@ -31,14 +34,51 @@ public class RenderTileManager {
 
     private final DataTileManager tileManager;
 
-    public RenderTileManager(ServerLevel level, BlockPos origin) {
+    private long lastOriginTile;
+
+    public RenderTileManager(WorldScreenv2 worldScreenv2, ServerLevel level, BlockPos origin) {
+        this.worldScreenv2 = worldScreenv2;
         this.level = level;
         this.origin = origin;
-        tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())),level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
+        tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())), level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
+        loadTiles(worldScreenv2, worldScreenv2.tileKey(origin));
     }
 
-    public void tick(WorldScreenv2 worldScreenv2) {
+
+    public void tick() {
         long originTile = worldScreenv2.tileKey(this.origin);
+        if (originTile != this.lastOriginTile) {
+            loadTiles(worldScreenv2, originTile);
+            lastOriginTile = originTile;
+        }
+
+
+        LongSet toRemove = new LongOpenHashSet();
+        trackedTileFutures.forEach((tilePos, future) -> {
+            if (future.isCompletedExceptionally()) {
+                try {
+                    future.getNow(null);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (future.isDone()) {
+                toRemove.add(tilePos);
+            }
+
+            int worldX = worldScreenv2.getWorldXFromTileKey(tilePos);
+            int worldZ = worldScreenv2.getWorldZFromTileKey(tilePos);
+            if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
+                future.cancel(true);
+                toRemove.add(tilePos);
+            }
+        });
+        toRemove.forEach(this.trackedTileFutures::remove);
+    }
+
+    private void loadTiles(WorldScreenv2 worldScreenv2, long originTile) {
         int xTileRange = worldScreenv2.getXTileRange();
         int zTileRange = worldScreenv2.getZTileRange();
 
@@ -71,35 +111,15 @@ public class RenderTileManager {
                 }
             }
         }
-
-
-        LongSet toRemove = new LongOpenHashSet();
-        trackedTileFutures.forEach((tilePos, future) -> {
-            if (future.isCompletedExceptionally()) {
-                try{
-                    future.getNow(null);
-                } catch (Exception e) {
-                    e.printStackTrace();
-//                    throw new RuntimeException(e);
-                }
-            }
-
-            if (future.isDone()) {
-                toRemove.add(tilePos);
-            }
-
-            int worldX = worldScreenv2.getWorldXFromTileKey(tilePos);
-            int worldZ = worldScreenv2.getWorldZFromTileKey(tilePos);
-            if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
-                future.cancel(true);
-                toRemove.add(tilePos);
-            }
-        });
-        toRemove.forEach(this.trackedTileFutures::remove);
     }
 
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTicks, WorldScreenv2 worldScreenv2) {
         ArrayList<RenderTile> renderTiles = new ArrayList<>(this.rendering.values());
+        renderTiles(poseStack, worldScreenv2, renderTiles, RenderTile::render);
+        renderTiles(poseStack, worldScreenv2, renderTiles, RenderTile::afterTilesRender);
+    }
+
+    private static void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, TileRenderStrategy tileRenderStrategy) {
         for (RenderTile tileToRender : renderTiles) {
 
             int localX = worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
@@ -108,13 +128,17 @@ public class RenderTileManager {
             int screenTileMinX = (worldScreenv2.getScreenCenterX() + localX);
             int screenTileMinZ = (worldScreenv2.getScreenCenterZ() + localZ);
 
-            tileToRender.render(poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
-            tileToRender.afterTilesRender(poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
+            poseStack.pushPose();
+            poseStack.translate(screenTileMinX, screenTileMinZ, 0);
+            poseStack.mulPose(Vector3f.ZN.rotationDegrees(180));
+
+            tileRenderStrategy.renderTile(tileToRender, poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
+
+            poseStack.popPose();
         }
     }
 
     public void cull(WorldScreenv2 worldScreenv2) {
-
         LongSet toRemove = new LongOpenHashSet();
         this.rendering.forEach((pos, tile) -> {
             int x = tile.getTileWorldX();
@@ -150,5 +174,11 @@ public class RenderTileManager {
                 return thread;
             }
         });
+    }
+
+    @FunctionalInterface
+    public interface TileRenderStrategy {
+
+        void renderTile(RenderTile renderTile, PoseStack stack, int screenTileMinX, int screenTileMinZ, List<String> toRender);
     }
 }

@@ -2,6 +2,7 @@ package com.corgitaco.worldviewer.cleanup.storage;
 
 
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import net.minecraft.Util;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
@@ -16,7 +17,6 @@ import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +25,13 @@ public class DataTile {
 
     private static final int SIZE = 16;
 
-    private final ConcurrentHashMap<Heightmap.Types, int[]> heights = new ConcurrentHashMap<>(new EnumMap<>(Heightmap.Types.class));
+    private final ConcurrentHashMap<Heightmap.Types, int[]> heights = Util.make(new ConcurrentHashMap<>(), map -> {
+        for (Heightmap.Types value : Heightmap.Types.values()) {
+            int[] heights = new int[SIZE];
+            Arrays.fill(heights, Integer.MIN_VALUE);
+            map.put(value, heights);
+        }
+    });
 
     private final DataTileBiomeStorage biomes;
 
@@ -79,14 +85,16 @@ public class DataTile {
     public int getHeight(Heightmap.Types type, int x, int z) {
         x = x & (SIZE - 1);
         z = z & (SIZE - 1);
-        if (!heights.containsKey(type)) {
-            int[] ints = new int[SIZE];
-            Arrays.fill(ints, Integer.MIN_VALUE);
-            heights.put(type, ints);
-        }
 
         int[] heights = this.heights.get(type);
         int index = getIndex(x, z);
+        if (heights != null || heights.length == 0) {
+            heights = new int[SIZE];
+            Arrays.fill(heights, Integer.MIN_VALUE);
+            this.heights.put(type, heights);
+        }
+
+
         int height = heights[index];
 
         if (height == Integer.MIN_VALUE) {

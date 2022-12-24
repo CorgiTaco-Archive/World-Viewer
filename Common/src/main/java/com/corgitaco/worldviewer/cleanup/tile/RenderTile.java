@@ -3,7 +3,6 @@ package com.corgitaco.worldviewer.cleanup.tile;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
-import com.example.examplemod.Constants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
@@ -14,6 +13,7 @@ import net.minecraft.world.level.ChunkPos;
 
 import java.util.*;
 import java.util.function.LongConsumer;
+import java.util.stream.Collectors;
 
 public class RenderTile {
 
@@ -29,28 +29,13 @@ public class RenderTile {
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
         this.size = size;
-        long beforeMs = System.currentTimeMillis();
-
-        StringBuilder factoryTimings = new StringBuilder();
-        factories.forEach((s, factory) -> {
-            long beforeFactoryMs = System.currentTimeMillis();
-
-            tileLayers.put(s, factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2));
-
-            long afterFactoryMs = System.currentTimeMillis();
-            if (!factoryTimings.isEmpty()) {
-                factoryTimings.append(", ");
-            }
-            factoryTimings.append(s).append(": ").append(afterFactoryMs - beforeFactoryMs).append("ms");
-
-        });
-        Constants.LOGGER.info("Created tile %s,%s in %sms (%s) for tile size of %s blocks & sample resolution of 1/%s blocks.".formatted(tileWorldX, tileWorldZ, (System.currentTimeMillis() - beforeMs), factoryTimings.toString(), size, sampleRes));
+        factories.forEach((s, factory) -> tileLayers.put(s, factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2)));
         forEachChunkPos(tileManager::unloadTile);
     }
 
 
-    public List<Component> toolTip(double mouseX, double mouseY, int mouseWorldX, int mouseWorldZ) {
-        return this.tileLayers.values().stream().map(tileLayer -> tileLayer.toolTip(mouseX, mouseY, mouseWorldX, mouseWorldZ)).filter(Objects::nonNull).toList();
+    public List<Component> toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
+        return this.tileLayers.values().stream().map(tileLayer -> tileLayer.toolTip(mouseScreenX, mouseScreenY, mouseWorldX, mouseWorldZ, mouseTileLocalX, mouseTileLocalY)).filter(Objects::nonNull).map(mutableComponent -> (Component) mutableComponent).collect(Collectors.toList());
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
@@ -65,7 +50,6 @@ public class RenderTile {
     public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
         for (TileLayer value : tileLayers.values()) {
             if (value.canRender(this, this.tileLayers.keySet())) {
-                DynamicTexture image = value.getImage();
                 value.afterTilesRender(stack, screenTileMinX, screenTileMinZ, 0, 0);
             }
         }
@@ -104,7 +88,7 @@ public class RenderTile {
         RenderSystem.setShaderColor(1, 1, 1, opacity);
         RenderSystem.setShaderTexture(0, texture.getId());
         RenderSystem.enableBlend();
-        GuiComponent.blit(stack, screenTileMinX, screenTileMinZ, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
+        GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.disableBlend();
         RenderSystem.setShaderColor(1, 1, 1, 1);
     }

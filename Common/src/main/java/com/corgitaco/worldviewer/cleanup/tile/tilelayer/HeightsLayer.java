@@ -5,6 +5,8 @@ import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.LevelHeightAccessor;
@@ -19,17 +21,19 @@ public class HeightsLayer extends TileLayer {
     private DynamicTexture lazy;
 
     private final int[][] colorData;
+    private final int[][] heights;
 
     public HeightsLayer(DataTileManager tileManager, int y, int worldX, int worldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, worldX, worldZ, size, sampleResolution, screen);
 
 
         colorData = new int[size][size];
+        heights = new int[size][size];
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                worldPos.set(worldX - sampleX, 0, worldZ - sampleZ);
+                worldPos.set(worldX + sampleX, 0, worldZ + sampleZ);
 
                 y = tileManager.getHeight(Heightmap.Types.OCEAN_FLOOR, worldPos.getX(), worldPos.getZ());
 
@@ -40,6 +44,7 @@ public class HeightsLayer extends TileLayer {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
                         colorData[dataX][dataZ] = grayScale;
+                        heights[dataX][dataZ] = y;
                     }
                 }
             }
@@ -55,6 +60,11 @@ public class HeightsLayer extends TileLayer {
     @Override
     public boolean canRender(RenderTile renderTile, Collection<String> currentlyRendering) {
         return !currentlyRendering.contains("biomes");
+    }
+
+    @Override
+    public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
+        return new TextComponent("height=%s".formatted(heights[mouseTileLocalX][mouseTileLocalY]));
     }
 
     @Override

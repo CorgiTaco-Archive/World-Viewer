@@ -1,6 +1,5 @@
 package com.corgitaco.worldviewer.common;
 
-import com.corgitaco.worldviewer.client.WorldScreenStructureSpritesReloadListener;
 import com.example.examplemod.network.ForgeNetworkHandler;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -16,7 +15,6 @@ public final class WorldViewerForge {
 
         bus.addListener(this::commonSetup);
         bus.addListener(this::clientSetup);
-        bus.addListener(this::registerReloadListener);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
@@ -24,9 +22,5 @@ public final class WorldViewerForge {
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
-    }
-
-    private void registerReloadListener(RegisterClientReloadListenersEvent event) {
-        event.registerReloadListener(new WorldScreenStructureSpritesReloadListener());
     }
 }

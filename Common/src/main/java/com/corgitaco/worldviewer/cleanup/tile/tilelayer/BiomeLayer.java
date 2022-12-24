@@ -3,35 +3,46 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
+import org.jetbrains.annotations.Nullable;
 
 public class BiomeLayer extends TileLayer {
 
     private final int[][] colorData;
 
+    private final String[][] toolTipData;
+
+
     private DynamicTexture lazy;
 
     public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.colorData = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution);
+        Pair<int[][], String[][]> data = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
+        this.colorData = data.getFirst();
+        this.toolTipData = data.getSecond();
     }
 
-    private static int[][] buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution) {
+    private static Pair<int[][], String[][]> buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screenv2) {
         int[][] colorData = new int[size][size];
+        String[][] toolTipData = new String[size][size];
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                int worldX = tileWorldX - sampleX;
-                int worldZ = tileWorldZ - sampleZ;
+                int worldX = tileWorldX + sampleX;
+                int worldZ = tileWorldZ + sampleZ;
                 worldPos.set(worldX, y, worldZ);
 
 
@@ -41,7 +52,8 @@ public class BiomeLayer extends TileLayer {
                     for (int z = 0; z < sampleResolution; z++) {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
-                        int color = COLORS.computeIfAbsent(biomeHolder.unwrapKey().orElseThrow(), biomeResourceKey -> {
+                        ResourceKey<Biome> biome = biomeHolder.unwrapKey().orElseThrow();
+                        colorData[dataX][dataZ] = _ARGBToABGR(FAST_COLORS.computeIfAbsent(biome, biomeResourceKey -> {
                             Biome value = biomeHolder.value();
                             float baseTemperature = value.getBaseTemperature();
                             float lerp = Mth.inverseLerp(baseTemperature, -2, 2);
@@ -49,14 +61,15 @@ public class BiomeLayer extends TileLayer {
                             int g = (int) Mth.clampedLerp(207, 0, lerp);
                             int b = (int) Mth.clampedLerp(240, 0, lerp);
 
-                            return NativeImage.combine(255, b, g, r);
-                        });
-                        colorData[dataX][dataZ] = FastColor.ARGB32.multiply(color, HeightsLayer.getGrayScale(y, tileManager.serverLevel()));
+                            return FastColor.ARGB32.color(255, r, g, b);
+                        }));
+
+                        toolTipData[dataX][dataZ] = "Biome: " + biome.location().toString();
                     }
                 }
             }
         }
-        return colorData;
+        return Pair.of(colorData, toolTipData);
     }
 
     @Override
@@ -75,8 +88,14 @@ public class BiomeLayer extends TileLayer {
         }
     }
 
+    @Override
+    public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
+        int color = colorData[mouseTileLocalX][mouseTileLocalY];
+        int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), _ABGRToARGB(color));
+        return new TextComponent(toolTipData[mouseTileLocalX][mouseTileLocalY]).setStyle(Style.EMPTY.withColor(styleColor));
+    }
 
-    public static final Object2IntOpenHashMap<ResourceKey<Biome>> COLORS = Util.make(new Object2IntOpenHashMap<>(), map -> {
+    public static final Object2IntOpenHashMap<ResourceKey<Biome>> FAST_COLORS = Util.make(new Object2IntOpenHashMap<>(), map -> {
         map.put(Biomes.BADLANDS, tryParseColor("0xD94515"));
         map.put(Biomes.BAMBOO_JUNGLE, tryParseColor("0x2C4205"));
         map.put(Biomes.BEACH, tryParseColor("0xFADE55"));
@@ -140,16 +159,28 @@ public class BiomeLayer extends TileLayer {
             String colorSubString = input.substring(2);
             result = (255 << 24) | (Integer.parseInt(colorSubString, 16));
 
-            int r = FastColor.ARGB32.red(result);
-            int g = FastColor.ARGB32.green(result);
-            int b = FastColor.ARGB32.blue(result);
-            int a = FastColor.ARGB32.alpha(result);
-
-            return NativeImage.combine(a, b, g, r);
+            return result;
         } catch (NumberFormatException e) {
             e.printStackTrace();
         }
 
         return result;
+    }
+
+    public static int _ARGBToABGR(int argb) {
+        int r = FastColor.ARGB32.red(argb);
+        int g = FastColor.ARGB32.green(argb);
+        int b = FastColor.ARGB32.blue(argb);
+        int a = FastColor.ARGB32.alpha(argb);
+
+        return NativeImage.combine(a, b, g, r);
+    }
+
+    public static int _ABGRToARGB(int abgr) {
+        int a = NativeImage.getA(abgr);
+        int b = NativeImage.getB(abgr);
+        int g = NativeImage.getG(abgr);
+        int r = NativeImage.getR(abgr);
+        return FastColor.ARGB32.color(a, r, g, b);
     }
 }

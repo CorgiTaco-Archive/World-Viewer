@@ -1,6 +1,6 @@
 package com.corgitaco.worldviewer.cleanup;
 
-import com.corgitaco.worldviewer.client.WorldScreen;
+import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -28,6 +28,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
 
 import static com.corgitaco.worldviewer.cleanup.util.ClientUtil.isKeyOrMouseButtonDown;
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
@@ -51,7 +53,7 @@ public class WorldScreenv2 extends Screen {
 
     private int scrollCooldown;
 
-    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, WorldScreen.StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
+    private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
     RenderTileManager renderTileManager;
 
@@ -72,20 +74,24 @@ public class WorldScreenv2 extends Screen {
                 ResourceLocation location = structure.unwrapKey().orElseThrow().location();
 
                 if (!structureRendering.containsKey(structure)) {
-                    WorldScreen.StructureRender structureRender;
+                    StructureRender structureRender;
                     ResourceManager resourceManager = Minecraft.getInstance().getResourceManager();
                     ResourceLocation resourceLocation = new ResourceLocation(location.getNamespace(), "worldview/icon/structure/" + location.getPath() + ".png");
 
                     if (resourceManager.hasResource(resourceLocation)) {
                         try (DynamicTexture texture = new DynamicTexture(NativeImage.read(resourceManager.getResource(resourceLocation).getInputStream()))) {
 
-                            structureRender = (stack, drawX, drawZ) -> {
+                            structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ) -> {
                                 RenderSystem.setShaderTexture(0, texture.getId());
                                 RenderSystem.enableBlend();
                                 var pixels = texture.getPixels();
                                 if (pixels == null) {
                                     return;
                                 }
+
+                                int drawX = (maxDrawX - minDrawX / 2);
+                                int drawZ = (maxDrawZ - minDrawZ / 2);
+
                                 int width = (int) (pixels.getWidth() / scale);
                                 int height = (int) (pixels.getHeight() / scale);
                                 GuiComponent.blit(stack, drawX - (width / 2), drawZ - (height / 2), 0.0F, 0.0F, width, height, width, height);
@@ -98,10 +104,7 @@ public class WorldScreenv2 extends Screen {
 
 
                     } else {
-                        structureRender = (stack, drawX, drawZ) -> {
-                            int range = 16;
-                            GuiComponent.fill(stack, drawX - range, drawZ - range, drawX + range, drawZ + range, color);
-                        };
+                        structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ) -> GuiComponent.fill(stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ, color);
                     }
 
                     this.structureRendering.put(structure, structureRender);
@@ -119,14 +122,14 @@ public class WorldScreenv2 extends Screen {
         computeStructureRenderers();
         setWorldArea();
 
-        this.renderTileManager = new RenderTileManager(level, origin);
+        this.renderTileManager = new RenderTileManager(this, level, origin);
         super.init();
     }
 
     @Override
     public void tick() {
         if (this.scrollCooldown < 0) {
-            this.renderTileManager.tick(this);
+            this.renderTileManager.tick();
         }
 
         scrollCooldown--;
@@ -153,6 +156,34 @@ public class WorldScreenv2 extends Screen {
 
 
         stack.popPose();
+        long originTile = tileKey(this.origin);
+
+
+        int screenCenterX = getScreenCenterX();
+        int scaledMouseX = (int) Math.round((double) mouseX / scale);
+
+        int screenCenterZ = getScreenCenterZ();
+        int scaledMouseZ = (int) Math.round((double) mouseY / scale);
+
+        int originTileX = tileToBlock(getTileX(originTile));
+        int originTileZ = tileToBlock(getTileZ(originTile));
+
+        int mouseWorldX = this.origin.getX() - (scaledMouseX - screenCenterX);
+        int mouseWorldZ = this.origin.getZ() - (scaledMouseZ - screenCenterZ);
+
+        BlockPos mouseWorldPos = new BlockPos(mouseWorldX, 0, mouseWorldZ);
+
+
+        long mouseTileKey = tileKey(mouseWorldPos);
+        RenderTile renderTile = this.renderTileManager.rendering.get(mouseTileKey);
+        if (renderTile != null) {
+            int mouseTileLocalX = (mouseWorldPos.getX() - renderTile.getTileWorldX());
+            int mouseTileLocalY = (mouseWorldPos.getZ() - renderTile.getTileWorldZ());
+            List<Component> components = renderTile.toolTip(mouseX, mouseY, mouseWorldPos.getX(), mouseWorldPos.getZ(), mouseTileLocalX, mouseTileLocalY);
+            components.add(0, new TextComponent("x=%s,z=%s".formatted(mouseWorldPos.getX(), mouseWorldPos.getZ())).withStyle(ChatFormatting.BOLD));
+
+            renderTooltip(stack, components, Optional.empty(), mouseX, mouseY);
+        }
         super.render(stack, mouseX, mouseY, partialTicks);
     }
 
@@ -308,22 +339,17 @@ public class WorldScreenv2 extends Screen {
     }
 
     //TODO: Figure out why this is incorrect.
-    public int getWorldXFromMouseX(double mouseX) {
-        int screenCenterX = getScreenCenterX();
-        int scaledMouseX = (int) Math.round(mouseX / scale);
-
-        return this.origin.getX() + (screenCenterX - scaledMouseX);
-    }
 
     //TODO: Figure out why this is incorrect.
-    public int getWorldZFromMouseY(double mouseZ) {
-        int screenCenterZ = getScreenCenterZ();
-        int scaledMouseZ = (int) Math.round(mouseZ / scale);
 
-        return this.origin.getZ() + (screenCenterZ - scaledMouseZ);
+    public Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> getStructureRendering() {
+        return structureRendering;
     }
 
-    public Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, WorldScreen.StructureRender> getStructureRendering() {
-        return structureRendering;
+
+    @FunctionalInterface
+    public interface StructureRender {
+
+        void render(PoseStack stack, int minDrawX, int minDrawZ, int maxDrawX, int maxDrawZ);
     }
 }

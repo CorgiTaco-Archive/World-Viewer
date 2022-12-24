@@ -6,7 +6,7 @@ import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +35,7 @@ public abstract class TileLayer {
     }
 
     @Nullable
-    public Component toolTip(double mouseX, double mouseY, double mouseWorldX, double mouseWorldZ) {
+    public MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
         return null;
     }
 
