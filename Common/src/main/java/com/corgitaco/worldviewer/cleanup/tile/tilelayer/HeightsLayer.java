@@ -60,11 +60,6 @@ public class HeightsLayer extends TileLayer {
     }
 
     @Override
-    public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        return new TextComponent("height=%s".formatted(this.dataTileManager.getHeightRaw(Heightmap.Types.OCEAN_FLOOR, mouseWorldX, mouseWorldZ)));
-    }
-
-    @Override
     public @Nullable DynamicTexture getImage() {
         if (lazy == null) {
             this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));

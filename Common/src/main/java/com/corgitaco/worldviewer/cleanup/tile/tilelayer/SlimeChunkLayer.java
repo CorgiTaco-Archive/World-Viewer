@@ -15,7 +15,7 @@ public class SlimeChunkLayer extends TileLayer {
     @Nullable
     private DynamicTexture lazy;
 
-    private final int[][] colorData;
+    private int[][] colorData;
 
     public SlimeChunkLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
@@ -32,9 +32,13 @@ public class SlimeChunkLayer extends TileLayer {
                 if (tileManager.isSlimeChunk(chunkX, chunkZ)) {
                     for (int xMove = 0; xMove < 16; xMove++) {
                         for (int zMove = 0; zMove < 16; zMove++) {
-                            int dataX = SectionPos.sectionToBlockCoord(x) + xMove;
-                            int dataZ = SectionPos.sectionToBlockCoord(z) + zMove;
-                            colorData[dataX][dataZ] = BiomeLayer._ARGBToABGR(FastColor.ARGB32.color(124, 120, 190, 93));
+                            if (xMove <= 1 || xMove >= 14 || zMove <= 1 || zMove >= 14) {
+                                int dataX = SectionPos.sectionToBlockCoord(x) + xMove;
+                                int dataZ = SectionPos.sectionToBlockCoord(z) + zMove;
+                                colorData[dataX][dataZ] = BiomeLayer._ARGBToABGR(FastColor.ARGB32.color(255, 120, 190, 93));
+                            } else {
+                                BiomeLayer._ARGBToABGR(FastColor.ARGB32.color(0, 0, 0, 0));
+                            }
                         }
                     }
                 } else {
@@ -52,18 +56,11 @@ public class SlimeChunkLayer extends TileLayer {
     }
 
     @Override
-    public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        int color = FastColor.ARGB32.color(124, 120, 190, 93);
-        boolean slimeChunk = colorData[mouseTileLocalX][mouseTileLocalY] == BiomeLayer._ARGBToABGR(color);
-
-        return new TextComponent("Slime Chunk? %s".formatted(slimeChunk ? "Yes" : "No")).setStyle(Style.EMPTY.withColor(slimeChunk ? color : FastColor.ARGB32.color(255, 255, 255, 255)));
-    }
-
-    @Override
     @Nullable
     public DynamicTexture getImage() {
         if (this.lazy == null) {
             this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+            this.colorData = null;
         }
         return this.lazy;
     }

@@ -1,6 +1,8 @@
 package com.corgitaco.worldviewer.cleanup;
 
+import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
+import com.corgitaco.worldviewer.cleanup.tile.tilelayer.BiomeLayer;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -14,20 +16,26 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextComponent;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -151,40 +159,55 @@ public class WorldScreenv2 extends Screen {
 
         this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
 
-
         drawGrid(stack);
 
-
         stack.popPose();
-        long originTile = tileKey(this.origin);
 
+        renderToolTip(stack, mouseX, mouseY);
+        super.render(stack, mouseX, mouseY, partialTicks);
+    }
 
-        int screenCenterX = getScreenCenterX();
+    private void renderToolTip(PoseStack stack, int mouseX, int mouseY) {
         int scaledMouseX = (int) Math.round((double) mouseX / scale);
-
-        int screenCenterZ = getScreenCenterZ();
         int scaledMouseZ = (int) Math.round((double) mouseY / scale);
 
-        int originTileX = tileToBlock(getTileX(originTile));
-        int originTileZ = tileToBlock(getTileZ(originTile));
-
-        int mouseWorldX = this.origin.getX() - (scaledMouseX - screenCenterX);
-        int mouseWorldZ = this.origin.getZ() - (scaledMouseZ - screenCenterZ);
+        int mouseWorldX = this.origin.getX() - (scaledMouseX - getScreenCenterX());
+        int mouseWorldZ = this.origin.getZ() - (scaledMouseZ - getScreenCenterZ());
 
         BlockPos mouseWorldPos = new BlockPos(mouseWorldX, 0, mouseWorldZ);
 
-
         long mouseTileKey = tileKey(mouseWorldPos);
         RenderTile renderTile = this.renderTileManager.rendering.get(mouseTileKey);
+
+        List<Component> toolTip = buildToolTip(mouseWorldPos, this.renderTileManager.getDataTileManager());
         if (renderTile != null) {
             int mouseTileLocalX = (mouseWorldPos.getX() - renderTile.getTileWorldX());
             int mouseTileLocalY = (mouseWorldPos.getZ() - renderTile.getTileWorldZ());
-            List<Component> components = renderTile.toolTip(mouseX, mouseY, mouseWorldPos.getX(), mouseWorldPos.getZ(), mouseTileLocalX, mouseTileLocalY);
-            components.add(0, new TextComponent("x=%s,z=%s".formatted(mouseWorldPos.getX(), mouseWorldPos.getZ())).withStyle(ChatFormatting.BOLD));
-
-            renderTooltip(stack, components, Optional.empty(), mouseX, mouseY);
+            toolTip.addAll(renderTile.toolTip(mouseX, mouseY, mouseWorldPos.getX(), mouseWorldPos.getZ(), mouseTileLocalX, mouseTileLocalY));
         }
-        super.render(stack, mouseX, mouseY, partialTicks);
+
+        renderTooltip(stack, toolTip, Optional.empty(), mouseX, mouseY);
+
+    }
+
+    private static List<Component> buildToolTip(BlockPos mouseWorldPos, DataTileManager dataTileManager) {
+        List<Component> components = new ArrayList<>();
+        int mouseWorldX = mouseWorldPos.getX();
+        int mouseWorldZ = mouseWorldPos.getZ();
+
+        components.add(new TextComponent("x=%s,z=%s".formatted(mouseWorldX, mouseWorldZ)).withStyle(ChatFormatting.BOLD));
+
+        ResourceKey<Biome> biomeResourceKey = dataTileManager.getBiomeRaw(mouseWorldX, mouseWorldZ).unwrapKey().orElseThrow();
+        int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), BiomeLayer.FAST_COLORS.getInt(biomeResourceKey));
+        components.add(new TextComponent("Biome: " + biomeResourceKey.location().toString()).setStyle(Style.EMPTY.withColor(styleColor)));
+
+        boolean slimeChunkRaw = dataTileManager.isSlimeChunkRaw(SectionPos.blockToSectionCoord(mouseWorldX), SectionPos.blockToSectionCoord(mouseWorldZ));
+        components.add(new TextComponent("Slime Chunk? %s".formatted(slimeChunkRaw ? "Yes" : "No")).setStyle(Style.EMPTY.withColor(slimeChunkRaw ? FastColor.ARGB32.color(124, 120, 190, 93) : FastColor.ARGB32.color(255, 255, 255, 255))));
+
+        int oceanFloorHeight = dataTileManager.getHeightRaw(Heightmap.Types.OCEAN_FLOOR, mouseWorldX, mouseWorldZ);
+        components.add(new TextComponent("Surface height = %s".formatted(oceanFloorHeight)));
+
+        return components;
     }
 
     private void drawGrid(PoseStack stack) {

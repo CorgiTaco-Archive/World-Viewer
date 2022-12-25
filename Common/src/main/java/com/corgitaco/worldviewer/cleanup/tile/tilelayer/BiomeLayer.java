@@ -81,13 +81,6 @@ public class BiomeLayer extends TileLayer {
         }
     }
 
-    @Override
-    public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        ResourceKey<Biome> biomeResourceKey = this.dataTileManager.getBiomeRaw(mouseWorldX, mouseWorldZ).unwrapKey().orElseThrow();
-        int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), FAST_COLORS.getInt(biomeResourceKey));
-        return new TextComponent("Biome: " + biomeResourceKey.location().toString()).setStyle(Style.EMPTY.withColor(styleColor));
-    }
-
     public static final Object2IntOpenHashMap<ResourceKey<Biome>> FAST_COLORS = Util.make(new Object2IntOpenHashMap<>(), map -> {
         map.put(Biomes.BADLANDS, tryParseColor("0xD94515"));
         map.put(Biomes.BAMBOO_JUNGLE, tryParseColor("0x2C4205"));

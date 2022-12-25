@@ -46,6 +46,9 @@ public class RenderTileManager {
         this.lastOriginTile = originTile;
     }
 
+    public DataTileManager getDataTileManager() {
+        return tileManager;
+    }
 
     public void tick() {
         long originTile = worldScreenv2.tileKey(this.origin);
