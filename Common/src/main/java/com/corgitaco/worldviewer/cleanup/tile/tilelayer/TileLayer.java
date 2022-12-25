@@ -5,6 +5,7 @@ import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.MutableComponent;
 import org.jetbrains.annotations.NotNull;
@@ -17,14 +18,16 @@ import java.util.function.Supplier;
 
 public abstract class TileLayer {
 
-    public static final Supplier<Map<String, Factory>> FACTORY_REGISTRY = () -> {
+    public static final Map<String, Factory> FACTORY_REGISTRY = Util.make(() -> {
         Map<String, Factory> map = new LinkedHashMap<>();
-//        map.put("heights", HeightsLayer::new);
+        map.put("heights", HeightsLayer::new);
         map.put("biomes", BiomeLayer::new);
         map.put("slime_chunks", SlimeChunkLayer::new);
         map.put("structures", StructuresLayer::new);
         return map;
-    };
+    });
+
+
 
     protected final DataTileManager dataTileManager;
     private final int tileWorldX;
@@ -41,7 +44,7 @@ public abstract class TileLayer {
         return null;
     }
 
-    public void afterTilesRender(PoseStack stack, double mouseX, double mouseY, double mouseWorldX, double mouseWorldZ) {
+    public void afterTilesRender(PoseStack stack, double mouseX, double mouseY, double mouseWorldX, double mouseWorldZ, double opacity) {
     }
 
 

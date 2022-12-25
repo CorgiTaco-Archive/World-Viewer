@@ -39,13 +39,14 @@ public class StructuresLayer extends TileLayer {
     }
 
     @Override
-    public void afterTilesRender(PoseStack stack, double screenTileMinX, double screenTileMinZ, double mouseWorldX, double mouseWorldZ) {
+    public void afterTilesRender(PoseStack stack, double screenTileMinX, double screenTileMinZ, double mouseWorldX, double mouseWorldZ, double opacity) {
+
         this.positionsForStructure.forEach(((configuredStructureFeatureHolder, longs) -> {
             for (long structureChunkPos : longs) {
                 int structureWorldX = SectionPos.sectionToBlockCoord(ChunkPos.getX(structureChunkPos)) - this.getTileWorldX();
                 int structureWorldZ = SectionPos.sectionToBlockCoord(ChunkPos.getZ(structureChunkPos)) - this.getTileWorldZ();
 
-                this.screen.getStructureRendering().get(configuredStructureFeatureHolder).render(stack, structureWorldX, structureWorldZ, structureWorldX + 15, structureWorldZ + 15);
+                this.screen.getStructureRendering().get(configuredStructureFeatureHolder).render(stack, structureWorldX, structureWorldZ, structureWorldX + 15, structureWorldZ + 15, (float) opacity);
             }
         }));
     }

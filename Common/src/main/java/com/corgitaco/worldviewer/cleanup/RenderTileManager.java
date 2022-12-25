@@ -108,7 +108,7 @@ public class RenderTileManager {
                             var x = worldScreenv2.getWorldXFromTileKey(tilePos);
                             var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY.get(), 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
+                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
                             rendering.put(tilePos, renderTile);
                             return renderTile;
                         }, executorService));
@@ -120,11 +120,11 @@ public class RenderTileManager {
 
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTicks, WorldScreenv2 worldScreenv2) {
         ArrayList<RenderTile> renderTiles = new ArrayList<>(this.rendering.values());
-        renderTiles(poseStack, worldScreenv2, renderTiles, RenderTile::render);
-        renderTiles(poseStack, worldScreenv2, renderTiles, RenderTile::afterTilesRender);
+        renderTiles(poseStack, worldScreenv2, renderTiles, worldScreenv2.opacities, RenderTile::render);
+        renderTiles(poseStack, worldScreenv2, renderTiles, worldScreenv2.opacities, RenderTile::afterTilesRender);
     }
 
-    private static void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, TileRenderStrategy tileRenderStrategy) {
+    private static void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, Map<String, Float> opacity, TileRenderStrategy tileRenderStrategy) {
         for (RenderTile tileToRender : renderTiles) {
 
             int localX = worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
@@ -137,7 +137,7 @@ public class RenderTileManager {
             poseStack.translate(screenTileMinX, screenTileMinZ, 0);
             poseStack.mulPose(Vector3f.ZN.rotationDegrees(180));
 
-            tileRenderStrategy.renderTile(tileToRender, poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>());
+            tileRenderStrategy.renderTile(tileToRender, poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>(), opacity);
 
             poseStack.popPose();
         }
@@ -184,6 +184,6 @@ public class RenderTileManager {
     @FunctionalInterface
     public interface TileRenderStrategy {
 
-        void renderTile(RenderTile renderTile, PoseStack stack, int screenTileMinX, int screenTileMinZ, List<String> toRender);
+        void renderTile(RenderTile renderTile, PoseStack stack, int screenTileMinX, int screenTileMinZ, List<String> toRender, Map<String, Float> opacity);
     }
 }

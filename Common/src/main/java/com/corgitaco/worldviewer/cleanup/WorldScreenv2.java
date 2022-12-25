@@ -3,6 +3,8 @@ package com.corgitaco.worldviewer.cleanup;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.BiomeLayer;
+import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
+import com.corgitaco.worldviewer.client.screen.WidgetList;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -11,6 +13,8 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.gui.components.*;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.server.IntegratedServer;
@@ -18,10 +22,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.*;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -35,9 +36,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.DoubleConsumer;
 
 import static com.corgitaco.worldviewer.cleanup.util.ClientUtil.isKeyOrMouseButtonDown;
 import static com.example.examplemod.util.LongPackingUtil.getTileX;
@@ -65,6 +65,11 @@ public class WorldScreenv2 extends Screen {
 
     RenderTileManager renderTileManager;
 
+    private WidgetList list;
+
+    protected final Map<String, Float> opacities = new HashMap<>();
+
+
     public WorldScreenv2(Component title) {
         super(title);
     }
@@ -77,7 +82,6 @@ public class WorldScreenv2 extends Screen {
                 var r = Mth.randomBetweenInclusive(random, 200, 256);
                 var g = Mth.randomBetweenInclusive(random, 200, 256);
                 var b = Mth.randomBetweenInclusive(random, 200, 256);
-                int color = FastColor.ARGB32.color(255, r, g, b);
 
                 ResourceLocation location = structure.unwrapKey().orElseThrow().location();
 
@@ -89,7 +93,7 @@ public class WorldScreenv2 extends Screen {
                     if (resourceManager.hasResource(resourceLocation)) {
                         try (DynamicTexture texture = new DynamicTexture(NativeImage.read(resourceManager.getResource(resourceLocation).getInputStream()))) {
 
-                            structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ) -> {
+                            structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ, opacity) -> {
                                 RenderSystem.setShaderTexture(0, texture.getId());
                                 RenderSystem.enableBlend();
                                 var pixels = texture.getPixels();
@@ -112,7 +116,7 @@ public class WorldScreenv2 extends Screen {
 
 
                     } else {
-                        structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ) -> GuiComponent.fill(stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ, color);
+                        structureRender = (stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ, opacity) -> GuiComponent.fill(stack, minDrawX, minDrawZ, maxDrawX, maxDrawZ, FastColor.ARGB32.color((int) (255 * opacity), r, g, b));
                     }
 
                     this.structureRendering.put(structure, structureRender);
@@ -131,6 +135,27 @@ public class WorldScreenv2 extends Screen {
         setWorldArea();
 
         this.renderTileManager = new RenderTileManager(this, level, origin);
+
+        int buttonWidth = 120;
+        int buttonHeight = 20;
+
+        List<AbstractWidget> opacity = new ArrayList<>();
+        for (String key : TileLayer.FACTORY_REGISTRY.keySet()) {
+            opacities.put(key, 1.0F);
+            opacity.add(new Slider(0,0, buttonWidth, buttonHeight, new TextComponent("%s opacity".formatted(key)), 1, value -> {
+                opacities.put(key, (float) Mth.clamp(value, 0F, 1F));
+            }));
+        }
+
+        int itemHeight = buttonHeight + 2;
+
+        int bottomPos = this.height - 70;
+        int listRenderedHeight = bottomPos + (buttonHeight * 3);
+
+        this.list = new WidgetList(opacity, buttonWidth + 10, listRenderedHeight, bottomPos, listRenderedHeight + 10, itemHeight);
+
+        this.list.setLeftPos(0);
+        addRenderableWidget(this.list);
         super.init();
     }
 
@@ -163,7 +188,9 @@ public class WorldScreenv2 extends Screen {
 
         stack.popPose();
 
-        renderToolTip(stack, mouseX, mouseY);
+        if (!overWidget(mouseX, mouseY)) {
+            renderToolTip(stack, mouseX, mouseY);
+        }
         super.render(stack, mouseX, mouseY, partialTicks);
     }
 
@@ -278,22 +305,37 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
-        cull();
+        if (!overWidget(mouseX, mouseY)) {
+            this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
+            cull();
+        }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    private boolean overWidget(double mouseX, double mouseY) {
+        boolean overWidget = false;
+        for (GuiEventListener child : this.children()) {
+            if (child.isMouseOver(mouseX, mouseY)) {
+                overWidget = true;
+                break;
+            }
+        }
+        return overWidget;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (isKeyOrMouseButtonDown(this.minecraft, this.minecraft.options.keyShift)) {
-            if (!this.level.isOutsideBuildHeight((int) (this.origin.getY() + delta))) {
-                this.origin.move(0, (int) delta, 0);
+        if (!overWidget(mouseX, mouseY)) {
+            if (isKeyOrMouseButtonDown(this.minecraft, this.minecraft.options.keyShift)) {
+                if (!this.level.isOutsideBuildHeight((int) (this.origin.getY() + delta))) {
+                    this.origin.move(0, (int) delta, 0);
+                }
+            } else {
+                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.1, 1);
+                cull();
             }
-        } else {
-            this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.1, 1);
-            cull();
+            this.scrollCooldown = 30;
         }
-        this.scrollCooldown = 30;
         return true;
     }
 
@@ -388,6 +430,26 @@ public class WorldScreenv2 extends Screen {
     @FunctionalInterface
     public interface StructureRender {
 
-        void render(PoseStack stack, int minDrawX, int minDrawZ, int maxDrawX, int maxDrawZ);
+        void render(PoseStack stack, int minDrawX, int minDrawZ, int maxDrawX, int maxDrawZ, float opacity);
+    }
+
+    private static class Slider extends AbstractSliderButton {
+
+        private final DoubleConsumer apply;
+
+        public Slider(int x, int y, int width, int height, Component message, double value, DoubleConsumer apply) {
+            super(x, y, width, height, message, value);
+            this.apply = apply;
+        }
+
+        @Override
+        protected void updateMessage() {
+
+        }
+
+        @Override
+        protected void applyValue() {
+            this.apply.accept(this.value);
+        }
     }
 }

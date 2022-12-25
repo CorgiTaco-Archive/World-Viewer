@@ -38,21 +38,25 @@ public class RenderTile {
         return this.tileLayers.values().stream().map(tileLayer -> tileLayer.toolTip(mouseScreenX, mouseScreenY, mouseWorldX, mouseWorldZ, mouseTileLocalX, mouseTileLocalY)).filter(Objects::nonNull).map(mutableComponent -> (Component) mutableComponent).collect(Collectors.toList());
     }
 
-    public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
-        for (TileLayer value : tileLayers.values()) {
-            DynamicTexture image = value.getImage();
-            if (image != null) {
-                renderImage(stack, screenTileMinX, screenTileMinZ, image, 1F);
+    public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
+        tileLayers.forEach((key, value) -> {
+            float layerOpacity = opacity.getOrDefault(key, 1F);
+            if (layerOpacity > 0F) {
+                DynamicTexture image = value.getImage();
+                if (image != null) {
+                    renderImage(stack, screenTileMinX, screenTileMinZ, image, layerOpacity);
+                }
             }
-        }
+        });
     }
 
-    public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender) {
-        for (TileLayer value : tileLayers.values()) {
-            if (value.canRender(this, this.tileLayers.keySet())) {
-                value.afterTilesRender(stack, screenTileMinX, screenTileMinZ, 0, 0);
+    public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
+        tileLayers.forEach((key, value) -> {
+            float layerOpacity = opacity.getOrDefault(key, 1F);
+            if (layerOpacity > 0F) {
+                value.afterTilesRender(stack, screenTileMinX, screenTileMinZ, 0, 0, layerOpacity);
             }
-        }
+        });
     }
 
     public void close() {
