@@ -34,7 +34,7 @@ public class SlimeChunkLayer extends TileLayer {
                         for (int zMove = 0; zMove < 16; zMove++) {
                             int dataX = SectionPos.sectionToBlockCoord(x) + xMove;
                             int dataZ = SectionPos.sectionToBlockCoord(z) + zMove;
-                            colorData[dataX][dataZ] = FastColor.ARGB32.color(255, 120, 190, 93);
+                            colorData[dataX][dataZ] = BiomeLayer._ARGBToABGR(FastColor.ARGB32.color(124, 120, 190, 93));
                         }
                     }
                 } else {
@@ -42,7 +42,7 @@ public class SlimeChunkLayer extends TileLayer {
                         for (int zMove = 0; zMove < 16; zMove++) {
                             int dataX = SectionPos.sectionToBlockCoord(x) + xMove;
                             int dataZ = SectionPos.sectionToBlockCoord(z) + zMove;
-                            colorData[dataX][dataZ] = FastColor.ARGB32.color(0, 0, 0, 0);
+                            colorData[dataX][dataZ] = BiomeLayer._ARGBToABGR(FastColor.ARGB32.color(0, 0, 0, 0));
                         }
                     }
                 }
@@ -53,8 +53,8 @@ public class SlimeChunkLayer extends TileLayer {
 
     @Override
     public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        int color = FastColor.ARGB32.color(255, 120, 190, 93);
-        boolean slimeChunk = colorData[mouseTileLocalX][mouseTileLocalY] == color;
+        int color = FastColor.ARGB32.color(124, 120, 190, 93);
+        boolean slimeChunk = colorData[mouseTileLocalX][mouseTileLocalY] == BiomeLayer._ARGBToABGR(color);
 
         return new TextComponent("Slime Chunk? %s".formatted(slimeChunk ? "Yes" : "No")).setStyle(Style.EMPTY.withColor(slimeChunk ? color : FastColor.ARGB32.color(255, 255, 255, 255)));
     }

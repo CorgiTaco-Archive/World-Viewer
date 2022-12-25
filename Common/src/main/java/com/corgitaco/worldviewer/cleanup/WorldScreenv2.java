@@ -190,50 +190,65 @@ public class WorldScreenv2 extends Screen {
     private void drawGrid(PoseStack stack) {
         int gridColor = FastColor.ARGB32.color(100, 255, 255, 255);
         long originTile = tileKey(this.origin);
-        int lineWidth = (int) Math.ceil(0.3 / scale);
+        int lineWidth = (int) Math.ceil(0.75 / scale);
 
         int xTileRange = getXTileRange();
         int xIncrement = 1;
 
+        int everyAmount = (int) Math.round(0.5 / scale);
+
         for (int x = -xTileRange; x < xTileRange; x += xIncrement) {
-            int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(getTileX(originTile) + x));
-            GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
+            int tileX = getTileX(originTile) + x;
+            if (tileX % everyAmount == 0) {
+
+                int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(tileX));
+                GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
+            }
         }
 
 
         int zTileRange = getZTileRange();
         int increment = 1;
         for (int z = -zTileRange; z < zTileRange; z += increment) {
-            int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(getTileZ(originTile) + z));
-            GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
+            int tileZ = getTileZ(originTile) + z;
+            if (tileZ % everyAmount == 0) {
+                int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(tileZ));
+                GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
+            }
         }
 
-        renderCoordinates(stack, originTile, xTileRange, zTileRange);
+        renderCoordinates(stack, originTile, xTileRange, zTileRange, everyAmount);
     }
 
-    private void renderCoordinates(PoseStack stack, long originTile, int xTileRange, int zTileRange) {
+    private void renderCoordinates(PoseStack stack, long originTile, int xTileRange, int zTileRange, int everyAmount) {
         for (int x = -xTileRange; x < xTileRange; x++) {
             for (int z = -zTileRange; z < zTileRange; z++) {
-                int worldX = tileToBlock(getTileX(originTile) + x);
-                int worldZ = tileToBlock(getTileZ(originTile) + z);
+                int tileX = getTileX(originTile) + x;
+                int tileZ = getTileZ(originTile) + z;
+                if (tileX % everyAmount == 0 && tileZ % everyAmount == 0) {
 
-                int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
-                int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
 
-                String formatted = "x%s,z%s".formatted(worldX, worldZ);
-                MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
+                    int worldX = tileToBlock(tileX);
+                    int worldZ = tileToBlock(tileZ);
 
-                int textWidth = Minecraft.getInstance().font.width(component);
-                float scale = Math.min((1F / this.scale) * 0.6F, 4);
+                    int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
+                    int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
 
-                float fontRenderX = xScreenPos - ((textWidth / 2F) * scale);
-                float fontRenderZ = zScreenPos - (Minecraft.getInstance().font.lineHeight * scale);
+                    String formatted = "x%s,z%s".formatted(worldX, worldZ);
+                    MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
 
-                stack.pushPose();
-                stack.translate(fontRenderX, fontRenderZ, 0);
-                stack.scale(scale, scale, scale);
-                Minecraft.getInstance().font.drawShadow(stack, component, 0, 0, FastColor.ARGB32.color(255, 255, 255, 255));
-                stack.popPose();
+                    int textWidth = Minecraft.getInstance().font.width(component);
+                    float scale = (1F / this.scale) * 0.9F;
+
+                    float fontRenderX = xScreenPos - ((textWidth / 2F) * scale);
+                    float fontRenderZ = zScreenPos - (Minecraft.getInstance().font.lineHeight * scale);
+
+                    stack.pushPose();
+                    stack.translate(fontRenderX, fontRenderZ, 0);
+                    stack.scale(scale, scale, scale);
+                    Minecraft.getInstance().font.drawShadow(stack, component, 0, 0, FastColor.ARGB32.color(255, 255, 255, 255));
+                    stack.popPose();
+                }
             }
         }
     }
@@ -252,7 +267,7 @@ public class WorldScreenv2 extends Screen {
                 this.origin.move(0, (int) delta, 0);
             }
         } else {
-            this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.03, 1.5);
+            this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.1, 1);
             cull();
         }
         this.scrollCooldown = 30;
@@ -311,14 +326,14 @@ public class WorldScreenv2 extends Screen {
     }
 
     public int getTileLocalXFromWorldX(int worldX) {
-        return getTileX(getOriginChunk()) - blockToTile(worldX);
+        return getTileX(getOriginTile()) - blockToTile(worldX);
     }
 
     public int getTileLocalZFromWorldZ(int worldZ) {
-        return getTileZ(getOriginChunk()) - blockToTile(worldZ);
+        return getTileZ(getOriginTile()) - blockToTile(worldZ);
     }
 
-    public long getOriginChunk() {
+    public long getOriginTile() {
         return tileKey(this.origin);
     }
 

@@ -3,7 +3,6 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -21,23 +20,18 @@ import org.jetbrains.annotations.Nullable;
 
 public class BiomeLayer extends TileLayer {
 
-    private final int[][] colorData;
+    private int[][] colorData;
 
-    private final String[][] toolTipData;
-
-
+    @Nullable
     private DynamicTexture lazy;
 
     public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        Pair<int[][], String[][]> data = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.colorData = data.getFirst();
-        this.toolTipData = data.getSecond();
+        this.colorData = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
     }
 
-    private static Pair<int[][], String[][]> buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screenv2) {
+    private static int[][] buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screenv2) {
         int[][] colorData = new int[size][size];
-        String[][] toolTipData = new String[size][size];
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
             for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
@@ -63,19 +57,18 @@ public class BiomeLayer extends TileLayer {
 
                             return FastColor.ARGB32.color(255, r, g, b);
                         }));
-
-                        toolTipData[dataX][dataZ] = "Biome: " + biome.location().toString();
                     }
                 }
             }
         }
-        return Pair.of(colorData, toolTipData);
+        return colorData;
     }
 
     @Override
     public DynamicTexture getImage() {
         if (lazy == null) {
             this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+            this.colorData = null;
         }
         return this.lazy;
     }
@@ -90,9 +83,9 @@ public class BiomeLayer extends TileLayer {
 
     @Override
     public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        int color = colorData[mouseTileLocalX][mouseTileLocalY];
-        int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), _ABGRToARGB(color));
-        return new TextComponent(toolTipData[mouseTileLocalX][mouseTileLocalY]).setStyle(Style.EMPTY.withColor(styleColor));
+        ResourceKey<Biome> biomeResourceKey = this.dataTileManager.getBiomeRaw(mouseWorldX, mouseWorldZ).unwrapKey().orElseThrow();
+        int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), FAST_COLORS.getInt(biomeResourceKey));
+        return new TextComponent("Biome: " + biomeResourceKey.location().toString()).setStyle(Style.EMPTY.withColor(styleColor));
     }
 
     public static final Object2IntOpenHashMap<ResourceKey<Biome>> FAST_COLORS = Util.make(new Object2IntOpenHashMap<>(), map -> {

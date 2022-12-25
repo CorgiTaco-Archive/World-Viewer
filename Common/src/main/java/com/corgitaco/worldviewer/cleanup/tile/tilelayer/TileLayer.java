@@ -19,17 +19,19 @@ public abstract class TileLayer {
 
     public static final Supplier<Map<String, Factory>> FACTORY_REGISTRY = () -> {
         Map<String, Factory> map = new LinkedHashMap<>();
-//        map.put("heights", HeightsLayer::new);
+        map.put("heights", HeightsLayer::new);
         map.put("biomes", BiomeLayer::new);
-//        map.put("slime_chunks", SlimeChunkLayer::new);
-//        map.put("structures", StructuresLayer::new);
+        map.put("slime_chunks", SlimeChunkLayer::new);
+        map.put("structures", StructuresLayer::new);
         return map;
     };
 
+    protected final DataTileManager dataTileManager;
     private final int tileWorldX;
     private final int tileWorldZ;
 
     public TileLayer(DataTileManager dataTileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+        this.dataTileManager = dataTileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
     }

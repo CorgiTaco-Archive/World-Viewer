@@ -180,7 +180,7 @@ public class DataTileManager {
 
         if (!this.dataTiles.containsKey(pos)) {
             try {
-                CompoundTag read = ioWorker.load(new ChunkPos(pos));
+                CompoundTag read = null; //ioWorker.load(new ChunkPos(pos));
                 if (read == null) {
                     value = new DataTile(pos, this);
                 } else {
@@ -235,6 +235,6 @@ public class DataTileManager {
     }
 
     public void close() {
-        saveAllTiles(true);
+//        saveAllTiles(true);
     }
 }

@@ -41,7 +41,9 @@ public class RenderTileManager {
         this.level = level;
         this.origin = origin;
         tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())), level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
-        loadTiles(worldScreenv2, worldScreenv2.tileKey(origin));
+        long originTile = worldScreenv2.tileKey(origin);
+        loadTiles(worldScreenv2, originTile);
+        this.lastOriginTile = originTile;
     }
 
 
@@ -59,8 +61,8 @@ public class RenderTileManager {
                 try {
                     future.getNow(null);
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
+//                    e.printStackTrace();
+//                    throw new RuntimeException(e);
                 }
             }
 

@@ -20,15 +20,13 @@ public class HeightsLayer extends TileLayer {
     @Nullable
     private DynamicTexture lazy;
 
-    private final int[][] colorData;
-    private final int[][] heights;
+    private int[][] colorData;
 
     public HeightsLayer(DataTileManager tileManager, int y, int worldX, int worldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         super(tileManager, y, worldX, worldZ, size, sampleResolution, screen);
 
 
         colorData = new int[size][size];
-        heights = new int[size][size];
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
@@ -44,7 +42,6 @@ public class HeightsLayer extends TileLayer {
                         int dataX = sampleX + x;
                         int dataZ = sampleZ + z;
                         colorData[dataX][dataZ] = grayScale;
-                        heights[dataX][dataZ] = y;
                     }
                 }
             }
@@ -64,13 +61,14 @@ public class HeightsLayer extends TileLayer {
 
     @Override
     public @Nullable MutableComponent toolTip(double mouseScreenX, double mouseScreenY, int mouseWorldX, int mouseWorldZ, int mouseTileLocalX, int mouseTileLocalY) {
-        return new TextComponent("height=%s".formatted(heights[mouseTileLocalX][mouseTileLocalY]));
+        return new TextComponent("height=%s".formatted(this.dataTileManager.getHeightRaw(Heightmap.Types.OCEAN_FLOOR, mouseWorldX, mouseWorldZ)));
     }
 
     @Override
     public @Nullable DynamicTexture getImage() {
         if (lazy == null) {
             this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+            this.colorData = null;
         }
         return this.lazy;
     }
