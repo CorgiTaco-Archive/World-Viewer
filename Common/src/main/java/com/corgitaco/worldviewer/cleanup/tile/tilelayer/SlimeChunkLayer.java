@@ -4,9 +4,6 @@ import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.SectionPos;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.util.FastColor;
 import org.jetbrains.annotations.Nullable;
 

@@ -1,7 +1,6 @@
 package com.corgitaco.worldviewer.common;
 
 import com.example.examplemod.network.ForgeNetworkHandler;
-import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
