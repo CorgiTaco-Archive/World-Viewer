@@ -195,7 +195,7 @@ public class WorldScreenv2 extends Screen {
         int mouseWorldX = mouseWorldPos.getX();
         int mouseWorldZ = mouseWorldPos.getZ();
 
-        components.add(new TextComponent("x=%s,z=%s".formatted(mouseWorldX, mouseWorldZ)).withStyle(ChatFormatting.BOLD));
+        components.add(new TextComponent("x=%s, z=%s".formatted(mouseWorldX, mouseWorldZ)).withStyle(ChatFormatting.BOLD));
 
         ResourceKey<Biome> biomeResourceKey = dataTileManager.getBiomeRaw(mouseWorldX, mouseWorldZ).unwrapKey().orElseThrow();
         int styleColor = FastColor.ARGB32.multiply(FastColor.ARGB32.color(255, 255, 255, 255), BiomeLayer.FAST_COLORS.getInt(biomeResourceKey));
