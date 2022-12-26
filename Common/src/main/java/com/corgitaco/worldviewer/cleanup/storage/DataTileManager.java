@@ -176,9 +176,9 @@ public class DataTileManager {
     }
 
     public DataTile getTile(long pos) {
-        DataTile value;
+        DataTile value = this.dataTiles.get(pos);
 
-        if (!this.dataTiles.containsKey(pos)) {
+        if (value == null) {
             try {
                 CompoundTag read = null; //ioWorker.load(new ChunkPos(pos));
                 if (read == null) {
@@ -190,10 +190,7 @@ public class DataTileManager {
                 Constants.LOGGER.error("Couldn't read file for tile [%s, %s]. ".formatted(ChunkPos.getX(pos), ChunkPos.getZ(pos)) + e.getMessage());
                 value = new DataTile(pos, this);
             }
-
             this.dataTiles.put(pos, value);
-        } else {
-            value = this.dataTiles.get(pos);
         }
         return value;
     }
@@ -212,6 +209,8 @@ public class DataTileManager {
             if (remove.isNeedsSaving()) {
 //                save(remove);
             }
+        } else {
+            throw new RuntimeException("Trying to unloading tile that doesnt exist.");
         }
     }
 

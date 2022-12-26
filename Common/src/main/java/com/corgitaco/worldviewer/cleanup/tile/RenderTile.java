@@ -3,9 +3,11 @@ package com.corgitaco.worldviewer.cleanup.tile;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
@@ -78,8 +80,8 @@ public class RenderTile {
     public void forEachChunkPos(LongConsumer pos) {
         for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
             for (int z = 0; z < SectionPos.blockToSectionCoord(size); z++) {
-                int chunkX = SectionPos.blockToSectionCoord(tileWorldX) - x;
-                int chunkZ = SectionPos.blockToSectionCoord(tileWorldZ) - z;
+                int chunkX = SectionPos.blockToSectionCoord(tileWorldX) + x;
+                int chunkZ = SectionPos.blockToSectionCoord(tileWorldZ) + z;
                 pos.accept(ChunkPos.asLong(chunkX, chunkZ));
             }
         }

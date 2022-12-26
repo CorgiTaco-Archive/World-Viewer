@@ -64,8 +64,8 @@ public class RenderTileManager {
                 try {
                     future.getNow(null);
                 } catch (Exception e) {
-//                    e.printStackTrace();
-//                    throw new RuntimeException(e);
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
                 }
             }
 
