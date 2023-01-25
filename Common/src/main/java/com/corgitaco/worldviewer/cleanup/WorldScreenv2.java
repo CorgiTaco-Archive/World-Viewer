@@ -45,12 +45,12 @@ import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
 public class WorldScreenv2 extends Screen {
 
-    public final int shift = 9;
+    public int shift = 11;
 
-    public int sampleResolution = 16;
 
     int tileSize = tileToBlock(1);
 
+    public int sampleResolution = tileSize >> 6;
 
     public final BlockPos.MutableBlockPos origin = new BlockPos.MutableBlockPos();
 
@@ -142,7 +142,7 @@ public class WorldScreenv2 extends Screen {
         List<AbstractWidget> opacity = new ArrayList<>();
         for (String key : TileLayer.FACTORY_REGISTRY.keySet()) {
             opacities.put(key, 1.0F);
-            opacity.add(new Slider(0,0, buttonWidth, buttonHeight, new TextComponent("%s opacity".formatted(key)), 1, value -> {
+            opacity.add(new Slider(0, 0, buttonWidth, buttonHeight, new TextComponent("%s opacity".formatted(key)), 1, value -> {
                 opacities.put(key, (float) Mth.clamp(value, 0F, 1F));
             }));
         }
@@ -245,7 +245,7 @@ public class WorldScreenv2 extends Screen {
         int xTileRange = getXTileRange();
         int xIncrement = 1;
 
-        int everyAmount = (int) Math.round(0.5 / scale);
+        int everyAmount = getXTileRange() / 2;
 
         for (int x = -xTileRange; x < xTileRange; x += xIncrement) {
             int tileX = getTileX(originTile) + x;
@@ -331,8 +331,19 @@ public class WorldScreenv2 extends Screen {
                     this.origin.move(0, (int) delta, 0);
                 }
             } else {
-                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.1, 1);
+                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.001, 1);
                 cull();
+
+                if (scale < 0.03) {
+
+                    if (delta < 0) {
+                        shift++;
+                    } else {
+                        shift--;
+                    }
+                    tileSize = tileToBlock(1);
+                    sampleResolution = tileSize >> 6;
+                }
             }
             this.scrollCooldown = 30;
         }

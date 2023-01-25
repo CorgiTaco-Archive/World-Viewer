@@ -5,6 +5,7 @@ import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.MutableComponent;
@@ -22,8 +23,8 @@ public abstract class TileLayer {
         Map<String, Factory> map = new LinkedHashMap<>();
         map.put("heights", HeightsLayer::new);
         map.put("biomes", BiomeLayer::new);
-        map.put("slime_chunks", SlimeChunkLayer::new);
-        map.put("structures", StructuresLayer::new);
+//        map.put("slime_chunks", SlimeChunkLayer::new);
+//        map.put("structures", StructuresLayer::new);
         return map;
     });
 
@@ -71,7 +72,7 @@ public abstract class TileLayer {
     @FunctionalInterface
     public interface Factory {
 
-        TileLayer make(DataTileManager tileManager, int scrollWorldY, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen);
+        TileLayer make(DataTileManager tileManager, int scrollWorldY, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet sampledDataChunks);
     }
 
     @NotNull

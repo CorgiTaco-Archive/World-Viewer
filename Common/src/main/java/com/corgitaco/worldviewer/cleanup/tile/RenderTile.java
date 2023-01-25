@@ -6,6 +6,8 @@ import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -25,14 +27,17 @@ public class RenderTile {
     private final int tileWorldX;
     private final int tileWorldZ;
     private final int size;
+    private int sampleRes;
 
     public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
         this.tileManager = tileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
         this.size = size;
-        factories.forEach((s, factory) -> tileLayers.put(s, factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2)));
-        forEachChunkPos(tileManager::unloadTile);
+        this.sampleRes = sampleRes;
+        LongSet sampledChunks = new LongOpenHashSet();
+        factories.forEach((s, factory) -> tileLayers.put(s, factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2, sampledChunks)));
+        sampledChunks.forEach(tileManager::unloadTile);
     }
 
 
@@ -74,17 +79,6 @@ public class RenderTile {
 
     public int getTileWorldZ() {
         return tileWorldZ;
-    }
-
-
-    public void forEachChunkPos(LongConsumer pos) {
-        for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
-            for (int z = 0; z < SectionPos.blockToSectionCoord(size); z++) {
-                int chunkX = SectionPos.blockToSectionCoord(tileWorldX) + x;
-                int chunkZ = SectionPos.blockToSectionCoord(tileWorldZ) + z;
-                pos.accept(ChunkPos.asLong(chunkX, chunkZ));
-            }
-        }
     }
 
     private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {

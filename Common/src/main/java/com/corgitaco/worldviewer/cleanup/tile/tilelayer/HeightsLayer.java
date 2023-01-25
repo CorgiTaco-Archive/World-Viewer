@@ -3,10 +3,12 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jetbrains.annotations.Nullable;
@@ -20,28 +22,25 @@ public class HeightsLayer extends TileLayer {
 
     private int[][] colorData;
 
-    public HeightsLayer(DataTileManager tileManager, int y, int worldX, int worldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+    public HeightsLayer(DataTileManager tileManager, int y, int worldX, int worldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet sampledChunks) {
         super(tileManager, y, worldX, worldZ, size, sampleResolution, screen);
 
 
-        colorData = new int[size][size];
+        int sampledSize = size / sampleResolution;
+        colorData = new int[sampledSize][sampledSize];
 
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
-        for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
-            for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                worldPos.set(worldX + sampleX, 0, worldZ + sampleZ);
+        for (int sampleX = 0; sampleX < sampledSize; sampleX++) {
+            for (int sampleZ = 0; sampleZ < sampledSize; sampleZ++) {
+                worldPos.set(worldX + (sampleX * sampleResolution), 0, worldZ + (sampleZ * sampleResolution));
+
+                sampledChunks.add(ChunkPos.asLong(worldPos));
 
                 y = tileManager.getHeight(Heightmap.Types.OCEAN_FLOOR, worldPos.getX(), worldPos.getZ());
 
                 int grayScale = getGrayScale(y, tileManager.serverLevel());
 
-                for (int x = 0; x < sampleResolution; x++) {
-                    for (int z = 0; z < sampleResolution; z++) {
-                        int dataX = sampleX + x;
-                        int dataZ = sampleZ + z;
-                        colorData[dataX][dataZ] = grayScale;
-                    }
-                }
+                colorData[sampleX][sampleZ] = grayScale;
             }
         }
     }

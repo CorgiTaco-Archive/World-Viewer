@@ -3,6 +3,7 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.mojang.blaze3d.platform.NativeImage;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -11,6 +12,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import org.jetbrains.annotations.Nullable;
@@ -22,40 +24,39 @@ public class BiomeLayer extends TileLayer {
     @Nullable
     private DynamicTexture lazy;
 
-    public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+    public BiomeLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet sampledChunks) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.colorData = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
+        this.colorData = buildImage(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, sampledChunks);
     }
 
-    private static int[][] buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screenv2) {
-        int[][] colorData = new int[size][size];
+    private static int[][] buildImage(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, LongSet sampledChunks) {
+        int sampledSize = size / sampleResolution;
+
+        int[][] colorData = new int[sampledSize][sampledSize];
         BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
-        for (int sampleX = 0; sampleX < size; sampleX += sampleResolution) {
-            for (int sampleZ = 0; sampleZ < size; sampleZ += sampleResolution) {
-                int worldX = tileWorldX + sampleX;
-                int worldZ = tileWorldZ + sampleZ;
+        for (int sampleX = 0; sampleX < sampledSize; sampleX++) {
+            for (int sampleZ = 0; sampleZ < sampledSize; sampleZ++) {
+                int worldX = tileWorldX + (sampleX * sampleResolution);
+                int worldZ = tileWorldZ + (sampleZ * sampleResolution);
                 worldPos.set(worldX, y, worldZ);
 
-
+                sampledChunks.add(ChunkPos.asLong(worldPos));
                 Holder<Biome> biomeHolder = tileManager.getBiome(worldX, worldZ);
 
-                for (int x = 0; x < sampleResolution; x++) {
-                    for (int z = 0; z < sampleResolution; z++) {
-                        int dataX = sampleX + x;
-                        int dataZ = sampleZ + z;
-                        ResourceKey<Biome> biome = biomeHolder.unwrapKey().orElseThrow();
-                        colorData[dataX][dataZ] = _ARGBToABGR(FAST_COLORS.computeIfAbsent(biome, biomeResourceKey -> {
-                            Biome value = biomeHolder.value();
-                            float baseTemperature = value.getBaseTemperature();
-                            float lerp = Mth.inverseLerp(baseTemperature, -2, 2);
-                            int r = (int) Mth.clampedLerp(137, 139, lerp);
-                            int g = (int) Mth.clampedLerp(207, 0, lerp);
-                            int b = (int) Mth.clampedLerp(240, 0, lerp);
+                int dataX = sampleX;
+                int dataZ = sampleZ;
+                ResourceKey<Biome> biome = biomeHolder.unwrapKey().orElseThrow();
+                colorData[dataX][dataZ] = _ARGBToABGR(FAST_COLORS.computeIfAbsent(biome, biomeResourceKey -> {
+                    Biome value = biomeHolder.value();
+                    float baseTemperature = value.getBaseTemperature();
+                    float lerp = Mth.inverseLerp(baseTemperature, -2, 2);
+                    int r = (int) Mth.clampedLerp(137, 139, lerp);
+                    int g = (int) Mth.clampedLerp(207, 0, lerp);
+                    int b = (int) Mth.clampedLerp(240, 0, lerp);
 
-                            return FastColor.ARGB32.color(255, r, g, b);
-                        }));
-                    }
-                }
+                    return FastColor.ARGB32.color(255, r, g, b);
+                }));
+
             }
         }
         return colorData;

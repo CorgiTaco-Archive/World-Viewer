@@ -210,7 +210,7 @@ public class DataTileManager {
 //                save(remove);
             }
         } else {
-            throw new RuntimeException("Trying to unloading tile that doesnt exist.");
+//            throw new RuntimeException("Trying to unloading tile that doesnt exist.");
         }
     }
 
