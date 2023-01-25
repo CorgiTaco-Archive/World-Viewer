@@ -15,14 +15,13 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Supplier;
 
 public abstract class TileLayer {
 
     public static final Map<String, Factory> FACTORY_REGISTRY = Util.make(() -> {
         Map<String, Factory> map = new LinkedHashMap<>();
-        map.put("heights", HeightsLayer::new);
         map.put("biomes", BiomeLayer::new);
+        map.put("heights", HeightsLayer::new);
 //        map.put("slime_chunks", SlimeChunkLayer::new);
 //        map.put("structures", StructuresLayer::new);
         return map;
@@ -55,6 +54,10 @@ public abstract class TileLayer {
     }
 
     public void close() {
+    }
+
+    public float brightness() {
+        return 1;
     }
 
     public int getTileWorldX() {

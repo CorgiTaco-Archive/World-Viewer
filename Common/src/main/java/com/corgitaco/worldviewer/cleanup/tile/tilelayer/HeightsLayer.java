@@ -72,4 +72,9 @@ public class HeightsLayer extends TileLayer {
             this.lazy.close();
         }
     }
+
+    @Override
+    public float brightness() {
+        return 1;
+    }
 }

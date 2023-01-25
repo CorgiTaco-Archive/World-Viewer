@@ -9,25 +9,21 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.gui.GuiComponent;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.level.ChunkPos;
 
 import java.util.*;
-import java.util.function.LongConsumer;
 import java.util.stream.Collectors;
 
 public class RenderTile {
 
 
-    private final HashMap<String, TileLayer> tileLayers = new HashMap<>();
+    private final HashMap<String, TileLayer> tileLayers = new LinkedHashMap<>();
     private DataTileManager tileManager;
     private final int tileWorldX;
     private final int tileWorldZ;
     private final int size;
-    private int sampleRes;
+    private final int sampleRes;
 
     public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
         this.tileManager = tileManager;
@@ -46,15 +42,29 @@ public class RenderTile {
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
+        RenderSystem.enableBlend();
+        RenderSystem.blendFuncSeparate(GlStateManager.SourceFactor.DST_COLOR, GlStateManager.DestFactor.ZERO, GlStateManager.SourceFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.DestFactor.SRC_ALPHA);
         tileLayers.forEach((key, value) -> {
             float layerOpacity = opacity.getOrDefault(key, 1F);
             if (layerOpacity > 0F) {
                 DynamicTexture image = value.getImage();
                 if (image != null) {
-                    renderImage(stack, screenTileMinX, screenTileMinZ, image, layerOpacity);
+                    renderImage(stack, image, layerOpacity, value.brightness());
                 }
             }
         });
+        RenderSystem.disableBlend();
+
+    }
+
+    private void renderImage(PoseStack stack, DynamicTexture texture, float opacity, float brightness) {
+        if (texture.getPixels() == null) {
+            return;
+        }
+        RenderSystem.setShaderColor(brightness * opacity, brightness * opacity, brightness * opacity, opacity);
+        RenderSystem.setShaderTexture(0, texture.getId());
+        GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
+        RenderSystem.setShaderColor(1, 1, 1, 1);
     }
 
     public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
@@ -81,19 +91,17 @@ public class RenderTile {
         return tileWorldZ;
     }
 
-    private void renderImage(PoseStack stack, int screenTileMinX, int screenTileMinZ, DynamicTexture texture, float opacity) {
-        if (texture.getPixels() == null) {
-            return;
-        }
-        RenderSystem.setShaderColor(1, 1, 1, opacity);
-        RenderSystem.setShaderTexture(0, texture.getId());
-        RenderSystem.enableBlend();
-        GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
-        RenderSystem.disableBlend();
-        RenderSystem.setShaderColor(1, 1, 1, 1);
-    }
+
 
     public Map<String, TileLayer> getTileLayers() {
         return tileLayers;
+    }
+
+    public int getSampleRes() {
+        return sampleRes;
+    }
+
+    public int getSize() {
+        return size;
     }
 }

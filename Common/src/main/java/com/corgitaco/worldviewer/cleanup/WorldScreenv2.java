@@ -13,7 +13,8 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
-import net.minecraft.client.gui.components.*;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -22,7 +23,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
-import net.minecraft.network.chat.*;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -45,7 +49,7 @@ import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
 public class WorldScreenv2 extends Screen {
 
-    public int shift = 11;
+    public int shift = 9;
 
 
     int tileSize = tileToBlock(1);
@@ -59,7 +63,7 @@ public class WorldScreenv2 extends Screen {
 
     public BoundingBox worldViewArea;
 
-    private int scrollCooldown;
+    private int coolDown;
 
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
@@ -161,11 +165,12 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     public void tick() {
-        if (this.scrollCooldown < 0) {
-            this.renderTileManager.tick();
+        if (this.coolDown == 0) {
+            this.renderTileManager.blockGeneration = false;
         }
+        this.renderTileManager.tick();
 
-        scrollCooldown--;
+        coolDown--;
         super.tick();
     }
 
@@ -180,7 +185,7 @@ public class WorldScreenv2 extends Screen {
 
         stack.pushPose();
         stack.scale(scale, scale, 0);
-        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
+        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 255, 255, 255));
 
         this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
 
@@ -308,6 +313,8 @@ public class WorldScreenv2 extends Screen {
         if (!overWidget(mouseX, mouseY)) {
             this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
             cull();
+            this.coolDown = 10;
+            this.renderTileManager.blockGeneration = true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
@@ -331,21 +338,28 @@ public class WorldScreenv2 extends Screen {
                     this.origin.move(0, (int) delta, 0);
                 }
             } else {
-                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.001, 1);
+                float prevScale = this.scale;
+                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.00000625, 0.5F);
                 cull();
 
-                if (scale < 0.03) {
-
-                    if (delta < 0) {
-                        shift++;
-                    } else {
-                        shift--;
+                if (scale != prevScale) {
+                    int prevShift = shift;
+                    if (scale < 0.25) {
+                        if (delta < 0) {
+                            shift = Math.min(22, shift + 1);
+                        } else {
+                            shift = Math.max(9, shift - 1);
+                        }
+                        if (prevShift != shift) {
+                            tileSize = tileToBlock(1);
+                            sampleResolution = tileSize >> 6;
+                        }
                     }
-                    tileSize = tileToBlock(1);
-                    sampleResolution = tileSize >> 6;
+                    this.coolDown = 30;
+                    this.renderTileManager.blockGeneration = true;
+                    this.renderTileManager.onScroll();
                 }
             }
-            this.scrollCooldown = 30;
         }
         return true;
     }
@@ -361,14 +375,14 @@ public class WorldScreenv2 extends Screen {
         int zRange = getZTileRange();
         this.worldViewArea = BoundingBox.fromCorners(
                 new Vec3i(
-                        this.origin.getX() - tileToBlock(xRange) - 1,
+                        Math.max(this.level.getWorldBorder().getMinX(), this.origin.getX() - tileToBlock(xRange) - 1),
                         level.getMinBuildHeight(),
-                        this.origin.getZ() - tileToBlock(zRange) - 1
+                        Math.max(this.level.getWorldBorder().getMinZ(), this.origin.getZ() - tileToBlock(zRange) - 1)
                 ),
                 new Vec3i(
-                        this.origin.getX() + tileToBlock(xRange) + 1,
+                        Math.min(this.level.getWorldBorder().getMaxX(), this.origin.getX() + tileToBlock(xRange) + 1),
                         level.getMaxBuildHeight(),
-                        this.origin.getZ() + tileToBlock(zRange) + 1
+                        Math.min(this.level.getWorldBorder().getMaxZ(), this.origin.getZ() + tileToBlock(zRange) + 1)
                 )
         );
     }
@@ -378,11 +392,20 @@ public class WorldScreenv2 extends Screen {
     }
 
     public int blockToTile(int blockCoord) {
-        return LongPackingUtil.blockToTile(blockCoord, this.shift);
+        return blockToTile(blockCoord, this.shift);
     }
 
+    public int blockToTile(int blockCoord, int shift) {
+        return LongPackingUtil.blockToTile(blockCoord, shift);
+    }
+
+
     public int tileToBlock(int tileCoord) {
-        return LongPackingUtil.tileToBlock(tileCoord, this.shift);
+        return tileToBlock(tileCoord, this.shift);
+    }
+
+    public int tileToBlock(int tileCoord, int shift) {
+        return LongPackingUtil.tileToBlock(tileCoord, shift);
     }
 
     public int getScreenCenterX() {

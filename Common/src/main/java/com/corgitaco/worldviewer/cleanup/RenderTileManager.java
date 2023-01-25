@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 public class RenderTileManager {
-    private final ExecutorService executorService = createExecutor();
+    private ExecutorService executorService = createExecutor();
 
     private final Long2ObjectLinkedOpenHashMap<CompletableFuture<RenderTile>> trackedTileFutures = new Long2ObjectLinkedOpenHashMap<>();
     private WorldScreenv2 worldScreenv2;
@@ -30,11 +30,11 @@ public class RenderTileManager {
 
     public final Map<Long, RenderTile> rendering = new ConcurrentHashMap<>();
 
-    public int submittedTaskCoolDown = 0;
 
     private final DataTileManager tileManager;
 
-    private long lastOriginTile;
+
+    public boolean blockGeneration = true;
 
     public RenderTileManager(WorldScreenv2 worldScreenv2, ServerLevel level, BlockPos origin) {
         this.worldScreenv2 = worldScreenv2;
@@ -43,7 +43,6 @@ public class RenderTileManager {
         tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())), level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
         long originTile = worldScreenv2.tileKey(origin);
         loadTiles(worldScreenv2, originTile);
-        this.lastOriginTile = originTile;
     }
 
     public DataTileManager getDataTileManager() {
@@ -52,13 +51,15 @@ public class RenderTileManager {
 
     public void tick() {
         long originTile = worldScreenv2.tileKey(this.origin);
-        if (originTile != this.lastOriginTile) {
+        if (!blockGeneration) {
             loadTiles(worldScreenv2, originTile);
-            lastOriginTile = originTile;
+            blockGeneration = true;
         }
 
 
         LongSet toRemove = new LongOpenHashSet();
+
+        List<Runnable> toSubmit = new ArrayList<>();
         trackedTileFutures.forEach((tilePos, future) -> {
             if (future.isCompletedExceptionally()) {
                 try {
@@ -78,9 +79,24 @@ public class RenderTileManager {
             if (!worldScreenv2.worldViewArea.intersects(worldX, worldZ, worldX, worldZ) && !future.isCancelled()) {
                 future.cancel(true);
                 toRemove.add(tilePos);
+            } else {
+                toSubmit.add(() -> {
+                    RenderTile renderTile = future.getNow(null);
+                    if (renderTile != null) {
+                        int newSampleRes = renderTile.getSampleRes() >> 1;
+                        if (newSampleRes > worldScreenv2.sampleResolution) {
+                            submitTileFuture(worldScreenv2, renderTile.getSize(), tilePos, newSampleRes);
+                        }
+                    }
+                });
             }
         });
+
         toRemove.forEach(this.trackedTileFutures::remove);
+
+
+
+        toSubmit.forEach(Runnable::run);
     }
 
     private void loadTiles(WorldScreenv2 worldScreenv2, long originTile) {
@@ -93,9 +109,10 @@ public class RenderTileManager {
         int tileRange = Math.max(xTileRange, zTileRange) + 2;
         for (int tileDistanceFromOrigin = 0; tileDistanceFromOrigin <= tileRange; tileDistanceFromOrigin++) {
 
-            int originWorldX = worldScreenv2.getWorldXFromTileKey(originTile) + (worldScreenv2.tileSize / 2);
-            int originWorldZ = worldScreenv2.getWorldZFromTileKey(originTile) + (worldScreenv2.tileSize / 2);
-            double distance = worldScreenv2.tileSize * tileDistanceFromOrigin;
+            int tileSize = worldScreenv2.tileSize;
+            int originWorldX = worldScreenv2.getWorldXFromTileKey(originTile) + (tileSize / 2);
+            int originWorldZ = worldScreenv2.getWorldZFromTileKey(originTile) + (tileSize / 2);
+            double distance = tileSize * tileDistanceFromOrigin;
 
             for (int i = 0; i < slices; i++) {
                 double angle = i * sliceSize;
@@ -103,19 +120,24 @@ public class RenderTileManager {
                 int worldTileZ = (int) Math.round(originWorldZ + (Math.cos(angle) * distance));
                 if (worldScreenv2.worldViewArea.intersects(worldTileX, worldTileZ, worldTileX, worldTileZ)) {
                     long tilePos = LongPackingUtil.tileKey(worldScreenv2.blockToTile(worldTileX), worldScreenv2.blockToTile(worldTileZ));
-                    if (!rendering.containsKey(tilePos)) {
-                        trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
-                            var x = worldScreenv2.getWorldXFromTileKey(tilePos);
-                            var z = worldScreenv2.getWorldZFromTileKey(tilePos);
-
-                            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, worldScreenv2.tileSize, worldScreenv2.sampleResolution, worldScreenv2);
-                            rendering.put(tilePos, renderTile);
-                            return renderTile;
-                        }, executorService));
+                    RenderTile tile = rendering.get(tilePos);
+                    if (tile == null) {
+                        submitTileFuture(worldScreenv2, tileSize, tilePos, worldScreenv2.sampleResolution << 3);
                     }
                 }
             }
         }
+    }
+
+    private void submitTileFuture(WorldScreenv2 worldScreenv2, int tileSize, long tilePos, int sampleResolution) {
+        trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
+            var x = worldScreenv2.getWorldXFromTileKey(tilePos);
+            var z = worldScreenv2.getWorldZFromTileKey(tilePos);
+
+            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, tileSize, sampleResolution, worldScreenv2);
+            rendering.put(tilePos, renderTile);
+            return renderTile;
+        }, executorService));
     }
 
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTicks, WorldScreenv2 worldScreenv2) {
@@ -162,6 +184,12 @@ public class RenderTileManager {
         this.rendering.forEach((pos, tile) -> tile.close());
         this.rendering.clear();
         this.tileManager.close();
+    }
+
+    public void onScroll() {
+        this.executorService.shutdownNow();
+        this.executorService = createExecutor();
+        this.trackedTileFutures.clear();
     }
 
     public static ExecutorService createExecutor() {
