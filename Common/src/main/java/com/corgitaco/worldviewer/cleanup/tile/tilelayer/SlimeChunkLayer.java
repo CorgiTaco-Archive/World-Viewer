@@ -2,9 +2,11 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.FastColor;
+import net.minecraft.world.level.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
 public class SlimeChunkLayer extends TileLayer {
@@ -12,20 +14,22 @@ public class SlimeChunkLayer extends TileLayer {
     @Nullable
     private DynamicTexture lazy;
 
+    @Nullable
     private int[][] colorData;
 
-    public SlimeChunkLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+    public SlimeChunkLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet sampledChunks) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.colorData = getColorData(tileManager, tileWorldX, tileWorldZ, size);
+        this.colorData = sampleResolution <= 16 && size <= 512 ? getColorData(tileManager, tileWorldX, tileWorldZ, size, sampledChunks) : null;
     }
 
-    private static int[][] getColorData(DataTileManager tileManager, int tileWorldX, int tileWorldZ, int size) {
+    private static int[][] getColorData(DataTileManager tileManager, int tileWorldX, int tileWorldZ, int size, LongSet sampledChunks) {
         int[][] colorData = new int[size][size];
         for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
             for (int z = 0; z < SectionPos.blockToSectionCoord(size); z++) {
                 int chunkX = SectionPos.blockToSectionCoord(tileWorldX) + x;
                 int chunkZ = SectionPos.blockToSectionCoord(tileWorldZ) + z;
 
+                sampledChunks.add(ChunkPos.asLong(chunkX, chunkZ));
                 if (tileManager.isSlimeChunk(chunkX, chunkZ)) {
                     for (int xMove = 0; xMove < 16; xMove++) {
                         for (int zMove = 0; zMove < 16; zMove++) {
@@ -55,7 +59,7 @@ public class SlimeChunkLayer extends TileLayer {
     @Override
     @Nullable
     public DynamicTexture getImage() {
-        if (this.lazy == null) {
+        if (this.lazy == null && this.colorData != null) {
             this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
             this.colorData = null;
         }

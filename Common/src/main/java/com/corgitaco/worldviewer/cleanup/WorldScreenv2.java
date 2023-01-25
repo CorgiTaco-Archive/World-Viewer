@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
@@ -33,11 +34,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.ConfiguredStructureFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.NotNull;
+import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
 import java.util.*;
@@ -72,6 +77,8 @@ public class WorldScreenv2 extends Screen {
     private WidgetList list;
 
     protected final Map<String, Float> opacities = new HashMap<>();
+
+    private long lastClickTime;
 
 
     public WorldScreenv2(Component title) {
@@ -200,13 +207,7 @@ public class WorldScreenv2 extends Screen {
     }
 
     private void renderToolTip(PoseStack stack, int mouseX, int mouseY) {
-        int scaledMouseX = (int) Math.round((double) mouseX / scale);
-        int scaledMouseZ = (int) Math.round((double) mouseY / scale);
-
-        int mouseWorldX = this.origin.getX() - (scaledMouseX - getScreenCenterX());
-        int mouseWorldZ = this.origin.getZ() - (scaledMouseZ - getScreenCenterZ());
-
-        BlockPos mouseWorldPos = new BlockPos(mouseWorldX, 0, mouseWorldZ);
+        BlockPos mouseWorldPos = getMouseWorldPos(mouseX, mouseY);
 
         long mouseTileKey = tileKey(mouseWorldPos);
         RenderTile renderTile = this.renderTileManager.rendering.get(mouseTileKey);
@@ -221,6 +222,22 @@ public class WorldScreenv2 extends Screen {
         renderTooltip(stack, toolTip, Optional.empty(), mouseX, mouseY);
 
     }
+
+    @NotNull
+    private Vec3 getMouseWorldVec3(double mouseX, double mouseY) {
+        double scaledMouseX = mouseX / scale;
+        double scaledMouseZ = mouseY / scale;
+
+        double mouseWorldX = this.origin.getX() - (scaledMouseX - getScreenCenterX());
+        double mouseWorldZ = this.origin.getZ() - (scaledMouseZ - getScreenCenterZ());
+
+        return new Vec3(mouseWorldX, 0, mouseWorldZ);
+    }
+
+    private BlockPos getMouseWorldPos(double mouseX, double mouseY) {
+        return new BlockPos(getMouseWorldVec3(mouseX, mouseY));
+    }
+
 
     private static List<Component> buildToolTip(BlockPos mouseWorldPos, DataTileManager dataTileManager) {
         List<Component> components = new ArrayList<>();
@@ -310,13 +327,46 @@ public class WorldScreenv2 extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!overWidget(mouseX, mouseY)) {
-            this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
-            cull();
-            this.coolDown = 10;
-            this.renderTileManager.blockGeneration = true;
+        if (button == GLFW.GLFW_MOUSE_BUTTON_1) {
+            if (!overWidget(mouseX, mouseY)) {
+                this.origin.move((int) (dragX / scale), 0, (int) (dragY / scale));
+                cull();
+                this.coolDown = 10;
+                this.renderTileManager.blockGeneration = true;
+            }
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseZ, int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_2) {
+            Vec3 mouseWorldVec = getMouseWorldVec3(mouseX, mouseZ);
+
+            BlockPos mouseWorldPos = new BlockPos(mouseWorldVec);
+            LocalPlayer localPlayer = this.minecraft.player;
+            if (System.currentTimeMillis() - lastClickTime < 500) {
+                UUID uuid = localPlayer.getUUID();
+                localPlayer.displayClientMessage(new TextComponent("Preparing to teleport ").withStyle(ChatFormatting.YELLOW).append(localPlayer.getDisplayName()).append(" to ").append(new TextComponent("x=%.1f, z=%.1f".formatted(mouseWorldVec.x, mouseWorldVec.z)).withStyle(ChatFormatting.AQUA)), false);
+                this.level.getServer().submit(() -> {
+                    Vec3 tpPos = mouseWorldVec.add(0, this.level.getChunk(mouseWorldPos).getHeight(Heightmap.Types.WORLD_SURFACE, (int) mouseWorldVec.x, (int) mouseWorldVec.z) + 20, 0);
+                    Player serverPlayer = this.level.getPlayerByUUID(uuid);
+                    if (serverPlayer != null) {
+                        serverPlayer.teleportTo(mouseWorldVec.x, tpPos.y, mouseWorldVec.z);
+                        serverPlayer.displayClientMessage(new TextComponent("Teleported ").withStyle(ChatFormatting.GREEN).append(serverPlayer.getDisplayName()).append(" to ").append(new TextComponent("%.1f, %.1f, %.1f".formatted(mouseWorldVec.x, tpPos.y, mouseWorldVec.z)).withStyle(ChatFormatting.AQUA)), false);
+                    }
+                });
+
+                this.origin.set(mouseWorldVec.x, 0, mouseWorldVec.z);
+            }
+
+            Minecraft.getInstance().keyboardHandler.setClipboard(String.format(Locale.ROOT, "/execute in %s run tp @s %.2f ~ %.2f %.2f %.2f", this.level.dimension().location(), mouseWorldVec.x, mouseWorldVec.z, localPlayer.getYRot(), localPlayer.getXRot()));
+
+            lastClickTime = System.currentTimeMillis();
+        }
+        return super.mouseClicked(mouseX, mouseZ, button);
     }
 
     private boolean overWidget(double mouseX, double mouseY) {

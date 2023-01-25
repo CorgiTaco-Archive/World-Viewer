@@ -11,6 +11,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -24,15 +25,25 @@ public class RenderTile {
     private final int tileWorldZ;
     private final int size;
     private final int sampleRes;
+    private WorldScreenv2 worldScreenv2;
 
-    public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2) {
+    public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2, @Nullable RenderTile lastResolution) {
         this.tileManager = tileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
         this.size = size;
         this.sampleRes = sampleRes;
+        this.worldScreenv2 = worldScreenv2;
         LongSet sampledChunks = new LongOpenHashSet();
-        factories.forEach((s, factory) -> tileLayers.put(s, factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2, sampledChunks)));
+
+        if (lastResolution != null) {
+            lastResolution.tileLayers.forEach((s, layer) -> {
+                if (!layer.usesLod()) {
+                    tileLayers.put(s, layer);
+                }
+            });
+        }
+        factories.forEach((s, factory) -> tileLayers.computeIfAbsent(s, (s1) -> factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2, sampledChunks)));
         sampledChunks.forEach(tileManager::unloadTile);
     }
 
@@ -42,8 +53,9 @@ public class RenderTile {
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
+//        GuiComponent.fill(stack, 0, 0, size, size, FastColor.ARGB32.color(255, 255, 255, 255));
         RenderSystem.enableBlend();
-        RenderSystem.blendFuncSeparate(GlStateManager.SourceFactor.DST_COLOR, GlStateManager.DestFactor.ZERO, GlStateManager.SourceFactor.ONE_MINUS_SRC_ALPHA, GlStateManager.DestFactor.SRC_ALPHA);
+        RenderSystem.blendFunc(GlStateManager.SourceFactor.DST_COLOR,  GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
         tileLayers.forEach((key, value) -> {
             float layerOpacity = opacity.getOrDefault(key, 1F);
             if (layerOpacity > 0F) {
@@ -61,7 +73,7 @@ public class RenderTile {
         if (texture.getPixels() == null) {
             return;
         }
-        RenderSystem.setShaderColor(brightness * opacity, brightness * opacity, brightness * opacity, opacity);
+        RenderSystem.setShaderColor(opacity, opacity, opacity, opacity);
         RenderSystem.setShaderTexture(0, texture.getId());
         GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
         RenderSystem.setShaderColor(1, 1, 1, 1);
@@ -76,11 +88,16 @@ public class RenderTile {
         });
     }
 
-    public void close() {
+    public void close(boolean closeAll) {
         for (TileLayer value : this.tileLayers.values()) {
-            value.close();
+            if (!closeAll) {
+                if (value.usesLod()) {
+                    value.close();
+                }
+            } else {
+                value.close();
+            }
         }
-//        forEachChunkPos(pos -> this.tileManager.unloadTile(pos));
     }
 
     public int getTileWorldX() {

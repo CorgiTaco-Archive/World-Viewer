@@ -22,8 +22,8 @@ public abstract class TileLayer {
         Map<String, Factory> map = new LinkedHashMap<>();
         map.put("biomes", BiomeLayer::new);
         map.put("heights", HeightsLayer::new);
-//        map.put("slime_chunks", SlimeChunkLayer::new);
-//        map.put("structures", StructuresLayer::new);
+        map.put("slime_chunks", SlimeChunkLayer::new);
+        map.put("structures", StructuresLayer::new);
         return map;
     });
 
@@ -32,11 +32,13 @@ public abstract class TileLayer {
     protected final DataTileManager dataTileManager;
     private final int tileWorldX;
     private final int tileWorldZ;
+    private WorldScreenv2 screen;
 
     public TileLayer(DataTileManager dataTileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         this.dataTileManager = dataTileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
+        this.screen = screen;
     }
 
     @Nullable
@@ -69,6 +71,10 @@ public abstract class TileLayer {
     }
 
     public boolean canRender(RenderTile renderTile, Collection<String> currentlyRendering) {
+        return true;
+    }
+
+    public boolean usesLod() {
         return true;
     }
 

@@ -22,7 +22,7 @@ public class StructuresLayer extends TileLayer {
     private final Map<Holder<ConfiguredStructureFeature<?, ?>>, LongSet> positionsForStructure = Collections.synchronizedMap(new HashMap<>());
     private final WorldScreenv2 screen;
 
-    public StructuresLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
+    public StructuresLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet loadedChunks) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
         this.screen = screen;
 
@@ -31,6 +31,7 @@ public class StructuresLayer extends TileLayer {
                 int chunkX = SectionPos.blockToSectionCoord(tileWorldX) + x;
                 int chunkZ = SectionPos.blockToSectionCoord(tileWorldZ) + z;
                 long chunkKey = ChunkPos.asLong(chunkX, chunkZ);
+                loadedChunks.add(chunkKey);
                 for (Holder<ConfiguredStructureFeature<?, ?>> structure : tileManager.getStructures(chunkX, chunkZ)) {
                     positionsForStructure.computeIfAbsent(structure, configuredStructureFeatureHolder -> new LongArraySet()).add(chunkKey);
                 }

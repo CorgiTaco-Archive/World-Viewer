@@ -7,6 +7,7 @@ import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Vector3f;
+import io.netty.util.internal.ConcurrentSet;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -14,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +31,8 @@ public class RenderTileManager {
     private final BlockPos origin;
 
     public final Map<Long, RenderTile> rendering = new ConcurrentHashMap<>();
+
+    public final ConcurrentSet<RenderTile> toClose = new ConcurrentSet<>();
 
 
     private final DataTileManager tileManager;
@@ -85,7 +89,7 @@ public class RenderTileManager {
                     if (renderTile != null) {
                         int newSampleRes = renderTile.getSampleRes() >> 1;
                         if (newSampleRes > worldScreenv2.sampleResolution) {
-                            submitTileFuture(worldScreenv2, renderTile.getSize(), tilePos, newSampleRes);
+                            submitTileFuture(worldScreenv2, renderTile.getSize(), tilePos, newSampleRes, renderTile);
                         }
                     }
                 });
@@ -94,7 +98,10 @@ public class RenderTileManager {
 
         toRemove.forEach(this.trackedTileFutures::remove);
 
-
+        toClose.removeIf(renderTile -> {
+            renderTile.close(false);
+            return true;
+        });
 
         toSubmit.forEach(Runnable::run);
     }
@@ -122,20 +129,23 @@ public class RenderTileManager {
                     long tilePos = LongPackingUtil.tileKey(worldScreenv2.blockToTile(worldTileX), worldScreenv2.blockToTile(worldTileZ));
                     RenderTile tile = rendering.get(tilePos);
                     if (tile == null) {
-                        submitTileFuture(worldScreenv2, tileSize, tilePos, worldScreenv2.sampleResolution << 3);
+                        submitTileFuture(worldScreenv2, tileSize, tilePos, worldScreenv2.sampleResolution << 3, null);
                     }
                 }
             }
         }
     }
 
-    private void submitTileFuture(WorldScreenv2 worldScreenv2, int tileSize, long tilePos, int sampleResolution) {
+    private void submitTileFuture(WorldScreenv2 worldScreenv2, int tileSize, long tilePos, int sampleResolution, @Nullable RenderTile lastResolution) {
         trackedTileFutures.computeIfAbsent(tilePos, key -> CompletableFuture.supplyAsync(() -> {
             var x = worldScreenv2.getWorldXFromTileKey(tilePos);
             var z = worldScreenv2.getWorldZFromTileKey(tilePos);
 
-            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, tileSize, sampleResolution, worldScreenv2);
-            rendering.put(tilePos, renderTile);
+            RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, tileSize, sampleResolution, worldScreenv2, lastResolution);
+            RenderTile previous = rendering.put(tilePos, renderTile);
+            if (previous != null && previous != renderTile) {
+              this.toClose.add(previous);
+            }
             return renderTile;
         }, executorService));
     }
@@ -171,7 +181,7 @@ public class RenderTileManager {
             int x = tile.getTileWorldX();
             int z = tile.getTileWorldZ();
             if (!worldScreenv2.worldViewArea.intersects(x, z, x, z)) {
-                tile.close();
+                tile.close(true);
                 toRemove.add(pos);
             }
         });
@@ -181,7 +191,7 @@ public class RenderTileManager {
 
     public void close() {
         this.executorService.shutdownNow();
-        this.rendering.forEach((pos, tile) -> tile.close());
+        this.rendering.forEach((pos, tile) -> tile.close(true));
         this.rendering.clear();
         this.tileManager.close();
     }
@@ -190,6 +200,8 @@ public class RenderTileManager {
         this.executorService.shutdownNow();
         this.executorService = createExecutor();
         this.trackedTileFutures.clear();
+        this.rendering.forEach((pos, tile) -> tile.close(true));
+        this.rendering.clear();
     }
 
     public static ExecutorService createExecutor() {
