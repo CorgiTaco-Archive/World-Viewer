@@ -6,6 +6,7 @@ import com.corgitaco.worldviewer.cleanup.tile.tilelayer.BiomeLayer;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.corgitaco.worldviewer.client.screen.WidgetList;
 import com.example.examplemod.util.LongPackingUtil;
+import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,7 +19,9 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
@@ -26,9 +29,11 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.network.chat.*;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
@@ -70,6 +75,8 @@ public class WorldScreenv2 extends Screen {
     private int coolDown;
 
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
+
+    private static final Map<UUID, ResourceLocation> SKINS = new HashMap<>();
 
     public RenderTileManager renderTileManager;
 
@@ -231,6 +238,8 @@ public class WorldScreenv2 extends Screen {
 
         drawGrid(stack);
 
+        drawPlayers(stack);
+
         stack.popPose();
 
         if (!overWidget(mouseX, mouseY)) {
@@ -253,9 +262,7 @@ public class WorldScreenv2 extends Screen {
             toolTip.add(new TextComponent("Sample Resolution: %s blocks".formatted(renderTile.getSampleRes())));
             toolTip.add(new TextComponent("Tile size: %s blocks ".formatted(renderTile.getSize())));
         }
-
         renderTooltip(stack, toolTip, Optional.empty(), mouseX, mouseY);
-
     }
 
     @NotNull
@@ -307,7 +314,7 @@ public class WorldScreenv2 extends Screen {
         int tileMaxX = blockToTile(tileToBlock(getTileX(originTile) + getXTileRange()), gridShift);
 
         for (int tileX = tileMinX; tileX <= tileMaxX; tileX++) {
-            int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(tileX, gridShift));
+            int linePos = (int) (getScreenCenterX() + getLocalXFromWorldX(tileToBlock(tileX, gridShift)));
             GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
         }
 
@@ -315,7 +322,7 @@ public class WorldScreenv2 extends Screen {
         int tileMaxZ = blockToTile(tileToBlock(getTileZ(originTile) + getZTileRange()), gridShift);
 
         for (int tileZ = tileMinZ; tileZ <= tileMaxZ; tileZ++) {
-            int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(tileZ, gridShift));
+            int linePos = (int) (getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(tileZ, gridShift)));
             GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
         }
 
@@ -324,8 +331,8 @@ public class WorldScreenv2 extends Screen {
                 int worldX = tileToBlock(tileX, gridShift);
                 int worldZ = tileToBlock(tileZ, gridShift);
 
-                int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
-                int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
+                int xScreenPos = (int) (getScreenCenterX() + getLocalXFromWorldX(worldX));
+                int zScreenPos = (int) (getScreenCenterZ() + getLocalZFromWorldZ(worldZ));
 
                 String formatted = "x%s,z%s".formatted(worldX, worldZ);
                 MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
@@ -344,6 +351,37 @@ public class WorldScreenv2 extends Screen {
             }
         }
     }
+
+    private void drawPlayers(PoseStack stack) {
+        for (ServerPlayer player : this.level.players()) {
+
+            if (!this.worldViewArea.intersects(player.getBlockX(), player.getBlockZ(), player.getBlockX(), player.getBlockZ())) {
+                continue;
+            }
+            GameProfile gameProfile = player.getGameProfile();
+
+            ResourceLocation skinLocation = SKINS.computeIfAbsent(gameProfile.getId(), uuid ->
+                    new PlayerInfo(new ClientboundPlayerInfoPacket.PlayerUpdate(gameProfile, 0, null, player.getTabListDisplayName())).getSkinLocation()
+            );
+
+
+            boolean entityUpsideDown = LivingEntityRenderer.isEntityUpsideDown(player);
+            RenderSystem.setShaderTexture(0, skinLocation);
+            int yOffset = 8 + (entityUpsideDown ? 8 : 0);
+            int yHeight = 8 * (entityUpsideDown ? -1 : 1);
+
+            int size = (int) (8 / (scale)) * 3 ;
+
+            double localXFromWorldX = getLocalXFromWorldX(player.getX());
+
+            double localZFromWorldZ = getLocalZFromWorldZ(player.getZ());
+
+            int renderX = (int) ((getScreenCenterX() + localXFromWorldX) - (size / 2F));
+            int renderZ = (int) ((getScreenCenterZ() + localZFromWorldZ) - (size / 2F));
+            GuiComponent.blit(stack, renderX, renderZ, size, size, 8.0F, (float)yOffset, 8, yHeight, 64, 64);
+        }
+    }
+
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
@@ -501,11 +539,11 @@ public class WorldScreenv2 extends Screen {
         return tileKey(this.origin);
     }
 
-    public int getLocalXFromWorldX(int worldX) {
+    public double getLocalXFromWorldX(double worldX) {
         return this.origin.getX() - worldX;
     }
 
-    public int getLocalZFromWorldZ(int worldZ) {
+    public double getLocalZFromWorldZ(double worldZ) {
         return this.origin.getZ() - worldZ;
     }
 

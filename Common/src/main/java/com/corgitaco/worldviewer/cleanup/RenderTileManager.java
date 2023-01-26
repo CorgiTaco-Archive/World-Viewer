@@ -170,8 +170,8 @@ public class RenderTileManager {
     private static void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, Map<String, Float> opacity, TileRenderStrategy tileRenderStrategy) {
         for (RenderTile tileToRender : renderTiles) {
 
-            int localX = worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
-            int localZ = worldScreenv2.getLocalZFromWorldZ(tileToRender.getTileWorldZ());
+            int localX = (int) worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
+            int localZ = (int) worldScreenv2.getLocalZFromWorldZ(tileToRender.getTileWorldZ());
 
             int screenTileMinX = (worldScreenv2.getScreenCenterX() + localX);
             int screenTileMinZ = (worldScreenv2.getScreenCenterZ() + localZ);
