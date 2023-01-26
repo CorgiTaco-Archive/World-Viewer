@@ -295,67 +295,52 @@ public class WorldScreenv2 extends Screen {
     }
 
     private void drawGrid(PoseStack stack) {
+        drawGrid(stack, shift + 2);
+    }
+
+    private void drawGrid(PoseStack stack, int gridShift) {
         int gridColor = FastColor.ARGB32.color(100, 255, 255, 255);
         long originTile = tileKey(this.origin);
         int lineWidth = (int) Math.ceil(0.75 / scale);
 
-        int xTileRange = getXTileRange();
-        int xIncrement = 1;
+        int tileMinX = blockToTile(tileToBlock(getTileX(originTile) - getXTileRange()), gridShift);
+        int tileMaxX = blockToTile(tileToBlock(getTileX(originTile) + getXTileRange()), gridShift);
 
-        int everyAmount = getXTileRange() / 2;
-
-        for (int x = -xTileRange; x < xTileRange; x += xIncrement) {
-            int tileX = getTileX(originTile) + x;
-            if (tileX % everyAmount == 0) {
-
-                int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(tileX));
-                GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
-            }
+        for (int tileX = tileMinX; tileX <= tileMaxX; tileX++) {
+            int linePos = getScreenCenterX() + getLocalXFromWorldX(tileToBlock(tileX, gridShift));
+            GuiComponent.fill(stack, linePos - lineWidth, 0, linePos + lineWidth, (int) (height / scale), gridColor);
         }
 
+        int tileMinZ = blockToTile(tileToBlock(getTileZ(originTile) - getZTileRange()), gridShift);
+        int tileMaxZ = blockToTile(tileToBlock(getTileZ(originTile) + getZTileRange()), gridShift);
 
-        int zTileRange = getZTileRange();
-        int increment = 1;
-        for (int z = -zTileRange; z < zTileRange; z += increment) {
-            int tileZ = getTileZ(originTile) + z;
-            if (tileZ % everyAmount == 0) {
-                int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(tileZ));
-                GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
-            }
+        for (int tileZ = tileMinZ; tileZ <= tileMaxZ; tileZ++) {
+            int linePos = getScreenCenterZ() + getLocalZFromWorldZ(tileToBlock(tileZ, gridShift));
+            GuiComponent.fill(stack, 0, linePos - lineWidth, (int) (width / scale), linePos + lineWidth, gridColor);
         }
 
-        renderCoordinates(stack, originTile, xTileRange, zTileRange, everyAmount);
-    }
+        for (int tileX = tileMinX; tileX <= tileMaxX; tileX++) {
+            for (int tileZ = tileMinZ; tileZ <= tileMaxZ; tileZ++) {
+                int worldX = tileToBlock(tileX, gridShift);
+                int worldZ = tileToBlock(tileZ, gridShift);
 
-    private void renderCoordinates(PoseStack stack, long originTile, int xTileRange, int zTileRange, int everyAmount) {
-        for (int x = -xTileRange; x < xTileRange; x++) {
-            for (int z = -zTileRange; z < zTileRange; z++) {
-                int tileX = getTileX(originTile) + x;
-                int tileZ = getTileZ(originTile) + z;
-                if (tileX % everyAmount == 0 && tileZ % everyAmount == 0) {
+                int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
+                int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
 
+                String formatted = "x%s,z%s".formatted(worldX, worldZ);
+                MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
 
-                    int worldX = tileToBlock(tileX);
-                    int worldZ = tileToBlock(tileZ);
+                int textWidth = Minecraft.getInstance().font.width(component);
+                float scale = (1F / this.scale) * 0.9F;
 
-                    int xScreenPos = getScreenCenterX() + getLocalXFromWorldX(worldX);
-                    int zScreenPos = getScreenCenterZ() + getLocalZFromWorldZ(worldZ);
+                float fontRenderX = xScreenPos - ((textWidth / 2F) * scale);
+                float fontRenderZ = zScreenPos - (Minecraft.getInstance().font.lineHeight * scale);
 
-                    String formatted = "x%s,z%s".formatted(worldX, worldZ);
-                    MutableComponent component = new TextComponent(formatted).withStyle(ChatFormatting.BOLD);
-
-                    int textWidth = Minecraft.getInstance().font.width(component);
-                    float scale = (1F / this.scale) * 0.9F;
-
-                    float fontRenderX = xScreenPos - ((textWidth / 2F) * scale);
-                    float fontRenderZ = zScreenPos - (Minecraft.getInstance().font.lineHeight * scale);
-
-                    stack.pushPose();
-                    stack.translate(fontRenderX, fontRenderZ, 0);
-                    stack.scale(scale, scale, scale);
-                    Minecraft.getInstance().font.drawShadow(stack, component, 0, 0, FastColor.ARGB32.color(255, 255, 255, 255));
-                    stack.popPose();
-                }
+                stack.pushPose();
+                stack.translate(fontRenderX, fontRenderZ, 0);
+                stack.scale(scale, scale, scale);
+                Minecraft.getInstance().font.drawShadow(stack, component, 0, 0, FastColor.ARGB32.color(255, 255, 255, 255));
+                stack.popPose();
             }
         }
     }
@@ -525,16 +510,21 @@ public class WorldScreenv2 extends Screen {
     }
 
     public int getXTileRange() {
-        return blockToTile(getScreenCenterX()) + 2;
+        return getXTileRange(this.shift);
     }
 
     public int getZTileRange() {
-        return blockToTile(getScreenCenterZ()) + 2;
+        return getZTileRange(this.shift);
     }
 
-    //TODO: Figure out why this is incorrect.
+    public int getXTileRange(int shift) {
+        return blockToTile(getScreenCenterX(), shift) + 2;
+    }
 
-    //TODO: Figure out why this is incorrect.
+    public int getZTileRange(int shift) {
+        return blockToTile(getScreenCenterZ(), shift) + 2;
+    }
+
 
     public Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> getStructureRendering() {
         return structureRendering;
