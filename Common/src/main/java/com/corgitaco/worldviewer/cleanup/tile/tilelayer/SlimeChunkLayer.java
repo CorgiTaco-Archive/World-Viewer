@@ -19,7 +19,7 @@ public class SlimeChunkLayer extends TileLayer {
 
     public SlimeChunkLayer(DataTileManager tileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen, LongSet sampledChunks) {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
-        this.colorData = sampleResolution <= 16 && size <= 512 ? getColorData(tileManager, tileWorldX, tileWorldZ, size, sampledChunks) : null;
+        this.colorData = sampleResolution <= 16 && size <= 128 ? getColorData(tileManager, tileWorldX, tileWorldZ, size, sampledChunks) : null;
     }
 
     private static int[][] getColorData(DataTileManager tileManager, int tileWorldX, int tileWorldZ, int size, LongSet sampledChunks) {

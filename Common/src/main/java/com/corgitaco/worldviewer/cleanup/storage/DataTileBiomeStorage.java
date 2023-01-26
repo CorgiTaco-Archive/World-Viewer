@@ -1,6 +1,7 @@
 package com.corgitaco.worldviewer.cleanup.storage;
 
 import net.minecraft.core.Holder;
+import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -55,11 +56,11 @@ public class DataTileBiomeStorage {
     }
 
 
-    public Holder<Biome> getBiome(int x, int z, BiomeGetter getter) {
-        Holder<Biome> biome = getBiome(x, z);
+    public Holder<Biome> getBiome(int storageQuartX, int storageQuartZ, int worldX, int worldZ, BiomeGetter getter) {
+        Holder<Biome> biome = getBiome(storageQuartX, storageQuartZ);
 
         if (biome == null) {
-            Holder<Biome> holder = getter.get(x, z);
+            Holder<Biome> holder = getter.get(worldX, worldZ);
 
             int lookupIdx = -1;
             Holder<Biome>[] up = this.lookUp;
@@ -77,7 +78,7 @@ public class DataTileBiomeStorage {
                 lookupIdx = this.lookUp.length - 1;
             }
 
-            values[getIndex(x, z)] = lookupIdx;
+            values[getIndex(storageQuartX, storageQuartZ)] = lookupIdx;
             biome = holder;
         }
 
@@ -94,12 +95,12 @@ public class DataTileBiomeStorage {
     }
 
     private static int getIndex(int x, int z) {
-        return (x + z) * SIZE;
+        return x + z * SIZE;
     }
 
     @FunctionalInterface
     interface BiomeGetter {
 
-        Holder<Biome> get(int x, int z);
+        Holder<Biome> get(int worldX, int worldZ);
     }
 }

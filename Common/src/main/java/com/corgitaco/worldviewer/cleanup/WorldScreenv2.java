@@ -54,7 +54,7 @@ import static com.example.examplemod.util.LongPackingUtil.getTileZ;
 
 public class WorldScreenv2 extends Screen {
 
-    public int shift = 9;
+    public int shift = 7;
 
 
     int tileSize = tileToBlock(1);
@@ -217,6 +217,8 @@ public class WorldScreenv2 extends Screen {
             int mouseTileLocalX = (mouseWorldPos.getX() - renderTile.getTileWorldX());
             int mouseTileLocalY = (mouseWorldPos.getZ() - renderTile.getTileWorldZ());
             toolTip.addAll(renderTile.toolTip(mouseX, mouseY, mouseWorldPos.getX(), mouseWorldPos.getZ(), mouseTileLocalX, mouseTileLocalY));
+            toolTip.add(new TextComponent("Sample Resolution: %s blocks".formatted(renderTile.getSampleRes())));
+            toolTip.add(new TextComponent("Tile size: %s blocks ".formatted(renderTile.getSize())));
         }
 
         renderTooltip(stack, toolTip, Optional.empty(), mouseX, mouseY);
@@ -339,7 +341,6 @@ public class WorldScreenv2 extends Screen {
     }
 
 
-
     @Override
     public boolean mouseClicked(double mouseX, double mouseZ, int button) {
         if (button == GLFW.GLFW_MOUSE_BUTTON_2) {
@@ -388,26 +389,22 @@ public class WorldScreenv2 extends Screen {
                     this.origin.move(0, (int) delta, 0);
                 }
             } else {
-                float prevScale = this.scale;
-                this.scale = (float) Mth.clamp(this.scale + (delta * (this.scale * 0.5F)), 0.00000625, 0.5F);
-                cull();
+                int prevShift = shift;
+                shift = (int) Mth.clamp(shift - delta, 6, 24);
+                if (prevShift != shift) {
+                    tileSize = tileToBlock(1);
+                    sampleResolution = Math.max(1, tileSize >> 6);
 
-                if (scale != prevScale) {
-                    int prevShift = shift;
-                    if (scale < 0.25) {
-                        if (delta < 0) {
-                            shift = Math.min(22, shift + 1);
-                        } else {
-                            shift = Math.max(9, shift - 1);
-                        }
-                        if (prevShift != shift) {
-                            tileSize = tileToBlock(1);
-                            sampleResolution = tileSize >> 6;
-                        }
+                    if (delta > 0) {
+                        this.scale = (float) (this.scale + (delta * (this.scale)));
+                    } else {
+                        this.scale = (float) (this.scale + (delta * (this.scale * 0.5)));
+
                     }
                     this.coolDown = 30;
                     this.renderTileManager.blockGeneration = true;
                     this.renderTileManager.onScroll();
+                    cull();
                 }
             }
         }

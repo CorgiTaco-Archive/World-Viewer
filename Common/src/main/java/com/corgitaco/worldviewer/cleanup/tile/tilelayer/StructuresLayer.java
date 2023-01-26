@@ -26,6 +26,10 @@ public class StructuresLayer extends TileLayer {
         super(tileManager, y, tileWorldX, tileWorldZ, size, sampleResolution, screen);
         this.screen = screen;
 
+        if (size >= 256) {
+            return;
+        }
+
         for (int x = 0; x < SectionPos.blockToSectionCoord(size); x++) {
             for (int z = 0; z < SectionPos.blockToSectionCoord(size); z++) {
                 int chunkX = SectionPos.blockToSectionCoord(tileWorldX) + x;

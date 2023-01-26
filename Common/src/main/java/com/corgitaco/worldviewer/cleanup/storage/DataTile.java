@@ -27,7 +27,7 @@ public class DataTile {
 
     private final ConcurrentHashMap<Heightmap.Types, int[]> heights = Util.make(new ConcurrentHashMap<>(), map -> {
         for (Heightmap.Types value : Heightmap.Types.values()) {
-            int[] heights = new int[SIZE];
+            int[] heights = new int[SIZE * SIZE];
             Arrays.fill(heights, Integer.MIN_VALUE);
             map.put(value, heights);
         }
@@ -89,7 +89,7 @@ public class DataTile {
         int[] heights = this.heights.get(type);
         int index = getIndex(x, z);
         if (heights != null || heights.length == 0) {
-            heights = new int[SIZE];
+            heights = new int[SIZE * SIZE];
             Arrays.fill(heights, Integer.MIN_VALUE);
             this.heights.put(type, heights);
         }
@@ -115,23 +115,19 @@ public class DataTile {
     }
 
     public Holder<Biome> getBiome(int x, int z) {
-        int storageX = x & (SIZE - 1);
-        int storageZ = z & (SIZE - 1);
-        storageX = QuartPos.fromBlock(storageX);
-        storageZ = QuartPos.fromBlock(storageZ);
+        int storageQuartX = x & (SIZE - 1);
+        int storageQuartZ = z & (SIZE - 1);
+        storageQuartX = QuartPos.fromBlock(storageQuartX);
+        storageQuartZ = QuartPos.fromBlock(storageQuartZ);
 
-        storageX = QuartPos.toBlock(storageX);
-        storageZ = QuartPos.toBlock(storageZ);
-
-
-        return this.biomes.getBiome(storageX, storageZ, (x1, z1) -> {
+        return this.biomes.getBiome(storageQuartX, storageQuartZ, x, z, (worldX, worldZ) -> {
             this.needsSaving = true;
-            return this.manager.getBiomeRaw(x, z);
+            return this.manager.getBiomeRaw(worldX, worldZ);
         });
     }
 
     private static int getIndex(int x, int z) {
-        return (x + z) * SIZE;
+        return x + z * SIZE;
     }
 
     private static int getBiomeIndex(int x, int z) {
