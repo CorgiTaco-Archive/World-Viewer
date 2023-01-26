@@ -2,7 +2,9 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
+import com.corgitaco.worldviewer.client.WVDynamicTexture;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.Util;
@@ -16,6 +18,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
 
 public class BiomeLayer extends TileLayer {
 
@@ -63,9 +67,16 @@ public class BiomeLayer extends TileLayer {
     }
 
     @Override
+    public void render(PoseStack stack, float opacity, Map<String, TileLayer> layers) {
+        if (!layers.containsKey("mixed_heights_biomes") && getImage() != null) {
+            renderImage(stack, getImage(), opacity, 1);
+        }
+    }
+
+    @Override
     public DynamicTexture getImage() {
         if (lazy == null) {
-            this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+            this.lazy = new WVDynamicTexture(makeNativeImageFromColorData(this.colorData));
             this.colorData = null;
         }
         return this.lazy;

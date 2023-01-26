@@ -2,26 +2,27 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
-import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.Util;
+import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.MutableComponent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 public abstract class TileLayer {
 
-    public static final Map<String, Factory> FACTORY_REGISTRY = Util.make(() -> {
-        Map<String, Factory> map = new LinkedHashMap<>();
+    public static final LinkedHashMap<String, Factory> FACTORY_REGISTRY = Util.make(() -> {
+        LinkedHashMap<String, Factory> map = new LinkedHashMap<>();
         map.put("biomes", BiomeLayer::new);
         map.put("heights", HeightsLayer::new);
+        map.put("mixed_heights_biomes", MixedLayer::new);
         map.put("slime_chunks", SlimeChunkLayer::new);
         map.put("structures", StructuresLayer::new);
         return map;
@@ -32,12 +33,14 @@ public abstract class TileLayer {
     protected final DataTileManager dataTileManager;
     private final int tileWorldX;
     private final int tileWorldZ;
-    private WorldScreenv2 screen;
+    protected int size;
+    protected WorldScreenv2 screen;
 
     public TileLayer(DataTileManager dataTileManager, int y, int tileWorldX, int tileWorldZ, int size, int sampleResolution, WorldScreenv2 screen) {
         this.dataTileManager = dataTileManager;
         this.tileWorldX = tileWorldX;
         this.tileWorldZ = tileWorldZ;
+        this.size = size;
         this.screen = screen;
     }
 
@@ -47,6 +50,20 @@ public abstract class TileLayer {
     }
 
     public void afterTilesRender(PoseStack stack, double mouseX, double mouseY, double mouseWorldX, double mouseWorldZ, double opacity) {
+    }
+
+    public void render(PoseStack stack, float opacity, Map<String, TileLayer> layers) {
+
+    }
+
+    public void renderImage(PoseStack stack, DynamicTexture texture, float opacity, float brightness) {
+        if (texture.getPixels() == null) {
+            return;
+        }
+        RenderSystem.setShaderColor(opacity, opacity, opacity, opacity);
+        RenderSystem.setShaderTexture(0, texture.getId());
+        GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
+        RenderSystem.setShaderColor(1, 1, 1, 1);
     }
 
 
@@ -68,10 +85,6 @@ public abstract class TileLayer {
 
     public int getTileWorldZ() {
         return tileWorldZ;
-    }
-
-    public boolean canRender(RenderTile renderTile, Collection<String> currentlyRendering) {
-        return true;
     }
 
     public boolean usesLod() {

@@ -72,7 +72,7 @@ public class WorldScreenv2 extends Screen {
 
     private final Object2ObjectOpenHashMap<Holder<ConfiguredStructureFeature<?, ?>>, StructureRender> structureRendering = new Object2ObjectOpenHashMap<>();
 
-    RenderTileManager renderTileManager;
+    public RenderTileManager renderTileManager;
 
     private WidgetList list;
 
@@ -192,7 +192,7 @@ public class WorldScreenv2 extends Screen {
 
         stack.pushPose();
         stack.scale(scale, scale, 0);
-        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 255, 255, 255));
+        GuiComponent.fill(stack, 0, 0, (int) (width / scale), (int) (height / scale), FastColor.ARGB32.color(255, 0, 0, 0));
 
         this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
 

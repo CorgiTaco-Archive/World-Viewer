@@ -5,18 +5,22 @@ import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Vector3f;
 import io.netty.util.internal.ConcurrentSet;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +44,8 @@ public class RenderTileManager {
 
     public boolean blockGeneration = true;
 
+    public final ShaderInstance shaderInstance;
+
     public RenderTileManager(WorldScreenv2 worldScreenv2, ServerLevel level, BlockPos origin) {
         this.worldScreenv2 = worldScreenv2;
         this.level = level;
@@ -47,6 +53,11 @@ public class RenderTileManager {
         tileManager = new DataTileManager(Services.PLATFORM.configDir().resolve(String.valueOf(level.getSeed())), level.getChunkSource().getGenerator(), level.getChunkSource().getGenerator().getBiomeSource(), level, level.getSeed());
         long originTile = worldScreenv2.tileKey(origin);
         loadTiles(worldScreenv2, originTile);
+        try {
+            shaderInstance = new ShaderInstance(Minecraft.getInstance().getResourceManager(), "layer_mixer", DefaultVertexFormat.POSITION_TEX);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public DataTileManager getDataTileManager() {

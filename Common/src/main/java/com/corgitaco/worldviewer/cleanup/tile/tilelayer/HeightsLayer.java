@@ -2,7 +2,8 @@ package com.corgitaco.worldviewer.cleanup.tile.tilelayer;
 
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
-import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
+import com.corgitaco.worldviewer.client.WVDynamicTexture;
+import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
@@ -13,7 +14,7 @@ import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
+import java.util.Map;
 
 public class HeightsLayer extends TileLayer {
 
@@ -52,14 +53,16 @@ public class HeightsLayer extends TileLayer {
     }
 
     @Override
-    public boolean canRender(RenderTile renderTile, Collection<String> currentlyRendering) {
-        return !currentlyRendering.contains("biomes");
+    public void render(PoseStack stack, float opacity, Map<String, TileLayer> layers) {
+        if (!layers.containsKey("mixed_heights_biomes") && getImage() != null) {
+            renderImage(stack, getImage(), opacity, 1);
+        }
     }
 
     @Override
     public @Nullable DynamicTexture getImage() {
         if (lazy == null) {
-            this.lazy = new DynamicTexture(makeNativeImageFromColorData(this.colorData));
+            this.lazy = new WVDynamicTexture(makeNativeImageFromColorData(this.colorData));
             this.colorData = null;
         }
         return this.lazy;

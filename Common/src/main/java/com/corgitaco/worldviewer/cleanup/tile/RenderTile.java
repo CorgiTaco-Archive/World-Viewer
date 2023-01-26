@@ -3,13 +3,10 @@ package com.corgitaco.worldviewer.cleanup.tile;
 import com.corgitaco.worldviewer.cleanup.WorldScreenv2;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
-import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.minecraft.client.gui.GuiComponent;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,31 +50,17 @@ public class RenderTile {
     }
 
     public void render(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
-//        GuiComponent.fill(stack, 0, 0, size, size, FastColor.ARGB32.color(255, 255, 255, 255));
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.DST_COLOR,  GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
+//        RenderSystem.blendFunc(GlStateManager.SourceFactor.DST_COLOR,  GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
         tileLayers.forEach((key, value) -> {
             float layerOpacity = opacity.getOrDefault(key, 1F);
             if (layerOpacity > 0F) {
-                DynamicTexture image = value.getImage();
-                if (image != null) {
-                    renderImage(stack, image, layerOpacity, value.brightness());
-                }
+                value.render(stack, layerOpacity, tileLayers);
             }
         });
         RenderSystem.disableBlend();
-
     }
 
-    private void renderImage(PoseStack stack, DynamicTexture texture, float opacity, float brightness) {
-        if (texture.getPixels() == null) {
-            return;
-        }
-        RenderSystem.setShaderColor(opacity, opacity, opacity, opacity);
-        RenderSystem.setShaderTexture(0, texture.getId());
-        GuiComponent.blit(stack, 0, 0, 0.0F, 0.0F, this.size, this.size, this.size, this.size);
-        RenderSystem.setShaderColor(1, 1, 1, 1);
-    }
+
 
     public void afterTilesRender(PoseStack stack, int screenTileMinX, int screenTileMinZ, Collection<String> toRender, Map<String, Float> opacity) {
         tileLayers.forEach((key, value) -> {
