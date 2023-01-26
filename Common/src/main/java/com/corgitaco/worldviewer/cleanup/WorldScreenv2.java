@@ -15,6 +15,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.LocalPlayer;
@@ -24,10 +25,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.*;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -42,6 +40,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.IOException;
@@ -74,7 +73,12 @@ public class WorldScreenv2 extends Screen {
 
     public RenderTileManager renderTileManager;
 
-    private WidgetList list;
+    private WidgetList opacityList;
+    private WidgetList highlightBiomes;
+
+
+    @Nullable
+    public ResourceKey<Biome> highlightedBiome = null;
 
     protected final Map<String, Float> opacities = new HashMap<>();
 
@@ -163,10 +167,39 @@ public class WorldScreenv2 extends Screen {
         int bottomPos = this.height - 70;
         int listRenderedHeight = bottomPos + (buttonHeight * 3);
 
-        this.list = new WidgetList(opacity, buttonWidth + 10, listRenderedHeight, bottomPos, listRenderedHeight + 10, itemHeight);
+        this.opacityList = new WidgetList(opacity, buttonWidth + 10, listRenderedHeight, bottomPos, listRenderedHeight + 10, itemHeight);
 
-        this.list.setLeftPos(0);
-        addRenderableWidget(this.list);
+
+        int biomeButtonWidth = 150;
+        List<AbstractWidget> widgets = new ArrayList<>();
+        this.level.getChunkSource().getGenerator().getBiomeSource().possibleBiomes().stream().sorted(Comparator.comparing(biomeHolder -> biomeHolder.unwrapKey().orElseThrow().location(), ResourceLocation::compareTo)).forEach(possibleBiome -> {
+            ResourceKey<Biome> biomeResourceKey = possibleBiome.unwrapKey().orElseThrow();
+            ResourceLocation location = biomeResourceKey.location();
+            widgets.add(new Button(0, 0, biomeButtonWidth, 20, new TranslatableComponent("biome." + location.getNamespace() + "." + location.getPath()), button -> {
+                if (highlightedBiome == biomeResourceKey) {
+                    highlightedBiome = null;
+                } else {
+                    highlightedBiome = biomeResourceKey;
+                }
+            }));
+        });
+
+        int highLightBiomeButtonHeight = 10;
+
+        int biomeListHeight = bottomPos;
+
+
+        int middle = height - (height / 2);
+
+        int biomeSelectorHeight = ((highLightBiomeButtonHeight + 2) * 10);
+        int listBottom = middle - biomeSelectorHeight / 2;
+        int listTop = middle + (biomeSelectorHeight / 2);
+        this.highlightBiomes = new WidgetList(widgets, biomeButtonWidth + 10, biomeListHeight, listBottom, listTop, highLightBiomeButtonHeight + 10);
+
+        this.opacityList.setLeftPos(0);
+        this.highlightBiomes.setLeftPos(width - highlightBiomes.getRowWidth() - 1);
+        addRenderableWidget(this.opacityList);
+        addRenderableWidget(this.highlightBiomes);
         super.init();
     }
 

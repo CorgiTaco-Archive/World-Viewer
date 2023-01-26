@@ -5,8 +5,11 @@ import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import com.mojang.math.Matrix4f;
+import com.mojang.math.Vector4f;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.FastColor;
 
 import java.util.Map;
 
@@ -21,7 +24,18 @@ public class MixedLayer extends TileLayer {
         RenderSystem.enableBlend();
 
         RenderSystem.setShader(() -> this.screen.renderTileManager.shaderInstance);
-        this.screen.renderTileManager.shaderInstance.getUniform("Opacity").set(opacity);
+        ShaderInstance shaderInstance = this.screen.renderTileManager.shaderInstance;
+        shaderInstance.getUniform("Opacity").set(opacity);
+        Vector4f color;
+        if (this.screen.highlightedBiome != null) {
+            int argb = BiomeLayer.FAST_COLORS.getInt(this.screen.highlightedBiome);
+            color = new Vector4f(FastColor.ARGB32.red(argb) / 255.0F, FastColor.ARGB32.green(argb) / 255.0F, FastColor.ARGB32.blue(argb) / 255.0F, 1);
+        } else {
+            color = new Vector4f(0, 0, 0, 0);
+        }
+
+        shaderInstance.getUniform("BiomeColor").set(color);
+
         TileLayer heights = tileLayerMap.get("heights");
         TileLayer biomes = tileLayerMap.get("biomes");
         if (heights != null && biomes != null) {
@@ -46,17 +60,17 @@ public class MixedLayer extends TileLayer {
     }
 
     private static void innerBlit(PoseStack pPoseStack, int pX1, int pX2, int pY1, int pY2, int pBlitOffset, int pUWidth, int pVHeight, float pUOffset, float pVOffset, int pTextureWidth, int pTextureHeight) {
-        innerBlit(pPoseStack.last().pose(), pX1, pX2, pY1, pY2, pBlitOffset, (pUOffset + 0.0F) / (float)pTextureWidth, (pUOffset + (float)pUWidth) / (float)pTextureWidth, (pVOffset + 0.0F) / (float)pTextureHeight, (pVOffset + (float)pVHeight) / (float)pTextureHeight);
+        innerBlit(pPoseStack.last().pose(), pX1, pX2, pY1, pY2, pBlitOffset, (pUOffset + 0.0F) / (float) pTextureWidth, (pUOffset + (float) pUWidth) / (float) pTextureWidth, (pVOffset + 0.0F) / (float) pTextureHeight, (pVOffset + (float) pVHeight) / (float) pTextureHeight);
     }
 
 
     private static void innerBlit(Matrix4f pMatrix, int pX1, int pX2, int pY1, int pY2, int pBlitOffset, float pMinU, float pMaxU, float pMinV, float pMaxV) {
         BufferBuilder bufferbuilder = Tesselator.getInstance().getBuilder();
         bufferbuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        bufferbuilder.vertex(pMatrix, (float)pX1, (float)pY2, (float)pBlitOffset).uv(pMinU, pMaxV).endVertex();
-        bufferbuilder.vertex(pMatrix, (float)pX2, (float)pY2, (float)pBlitOffset).uv(pMaxU, pMaxV).endVertex();
-        bufferbuilder.vertex(pMatrix, (float)pX2, (float)pY1, (float)pBlitOffset).uv(pMaxU, pMinV).endVertex();
-        bufferbuilder.vertex(pMatrix, (float)pX1, (float)pY1, (float)pBlitOffset).uv(pMinU, pMinV).endVertex();
+        bufferbuilder.vertex(pMatrix, (float) pX1, (float) pY2, (float) pBlitOffset).uv(pMinU, pMaxV).endVertex();
+        bufferbuilder.vertex(pMatrix, (float) pX2, (float) pY2, (float) pBlitOffset).uv(pMaxU, pMaxV).endVertex();
+        bufferbuilder.vertex(pMatrix, (float) pX2, (float) pY1, (float) pBlitOffset).uv(pMaxU, pMinV).endVertex();
+        bufferbuilder.vertex(pMatrix, (float) pX1, (float) pY1, (float) pBlitOffset).uv(pMinU, pMinV).endVertex();
         bufferbuilder.end();
         BufferUploader.end(bufferbuilder);
     }
