@@ -101,9 +101,9 @@ public class WorldScreenv2 extends Screen {
         level.getChunkSource().getGenerator().possibleStructureSets().map(Holder::value).map(StructureSet::structures).forEach(structureSelectionEntries -> {
             for (StructureSet.StructureSelectionEntry structureSelectionEntry : structureSelectionEntries) {
                 Holder<ConfiguredStructureFeature<?, ?>> structure = structureSelectionEntry.structure();
-                var r = Mth.randomBetweenInclusive(random, 200, 256);
-                var g = Mth.randomBetweenInclusive(random, 200, 256);
-                var b = Mth.randomBetweenInclusive(random, 200, 256);
+                var r = Mth.randomBetweenInclusive(random, 25, 256);
+                var g = Mth.randomBetweenInclusive(random, 25, 256);
+                var b = Mth.randomBetweenInclusive(random, 25, 256);
 
                 ResourceLocation location = structure.unwrapKey().orElseThrow().location();
 
