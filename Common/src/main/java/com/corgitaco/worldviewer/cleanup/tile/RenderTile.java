@@ -24,6 +24,8 @@ public class RenderTile {
     private final int sampleRes;
     private WorldScreenv2 worldScreenv2;
 
+    private final LongSet sampledChunks = new LongOpenHashSet();
+
     public RenderTile(DataTileManager tileManager, Map<String, TileLayer.Factory> factories, int scrollY, int tileWorldX, int tileWorldZ, int size, int sampleRes, WorldScreenv2 worldScreenv2, @Nullable RenderTile lastResolution) {
         this.tileManager = tileManager;
         this.tileWorldX = tileWorldX;
@@ -31,9 +33,10 @@ public class RenderTile {
         this.size = size;
         this.sampleRes = sampleRes;
         this.worldScreenv2 = worldScreenv2;
-        LongSet sampledChunks = new LongOpenHashSet();
 
         if (lastResolution != null) {
+            sampledChunks.addAll(lastResolution.sampledChunks);
+
             lastResolution.tileLayers.forEach((s, layer) -> {
                 if (!layer.usesLod()) {
                     tileLayers.put(s, layer);
@@ -41,7 +44,9 @@ public class RenderTile {
             });
         }
         factories.forEach((s, factory) -> tileLayers.computeIfAbsent(s, (s1) -> factory.make(tileManager, scrollY, tileWorldX, tileWorldZ, size, sampleRes, worldScreenv2, sampledChunks)));
-        sampledChunks.forEach(tileManager::unloadTile);
+        if (sampleRes == worldScreenv2.sampleResolution) {
+            sampledChunks.forEach(tileManager::unloadTile);
+        }
     }
 
 

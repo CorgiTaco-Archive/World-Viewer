@@ -99,7 +99,7 @@ public class RenderTileManager {
                     RenderTile renderTile = future.getNow(null);
                     if (renderTile != null) {
                         int newSampleRes = renderTile.getSampleRes() >> 1;
-                        if (newSampleRes > worldScreenv2.sampleResolution) {
+                        if (newSampleRes >= worldScreenv2.sampleResolution) {
                             submitTileFuture(worldScreenv2, renderTile.getSize(), tilePos, newSampleRes, renderTile);
                         }
                     }
