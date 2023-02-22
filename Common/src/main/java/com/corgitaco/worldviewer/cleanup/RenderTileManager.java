@@ -1,12 +1,15 @@
 package com.corgitaco.worldviewer.cleanup;
 
+import com.corgitaco.worldviewer.WVVertexFormats;
 import com.corgitaco.worldviewer.cleanup.storage.DataTileManager;
 import com.corgitaco.worldviewer.cleanup.tile.RenderTile;
 import com.corgitaco.worldviewer.cleanup.tile.tilelayer.TileLayer;
 import com.example.examplemod.platform.Services;
 import com.example.examplemod.util.LongPackingUtil;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.*;
+import com.mojang.datafixers.util.Pair;
+import com.mojang.math.Matrix4f;
 import com.mojang.math.Vector3f;
 import io.netty.util.internal.ConcurrentSet;
 import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
@@ -14,6 +17,8 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
@@ -21,9 +26,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class RenderTileManager {
@@ -45,6 +48,7 @@ public class RenderTileManager {
     public boolean blockGeneration = true;
 
     public final ShaderInstance shaderInstance;
+    public final ShaderInstance batchedShader;
 
     public RenderTileManager(WorldScreenv2 worldScreenv2, ServerLevel level, BlockPos origin) {
         this.worldScreenv2 = worldScreenv2;
@@ -55,6 +59,7 @@ public class RenderTileManager {
         loadTiles(worldScreenv2, originTile);
         try {
             shaderInstance = new ShaderInstance(Minecraft.getInstance().getResourceManager(), "layer_mixer", DefaultVertexFormat.POSITION_TEX);
+            batchedShader = new ShaderInstance(Minecraft.getInstance().getResourceManager(), "batched", WVVertexFormats.POSITION_TEX_INDEX);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -155,7 +160,7 @@ public class RenderTileManager {
             RenderTile renderTile = new RenderTile(this.tileManager, TileLayer.FACTORY_REGISTRY, 63, x, z, tileSize, sampleResolution, worldScreenv2, lastResolution);
             RenderTile previous = rendering.put(tilePos, renderTile);
             if (previous != null && previous != renderTile) {
-              this.toClose.add(previous);
+                this.toClose.add(previous);
             }
             return renderTile;
         }, executorService));
@@ -167,7 +172,8 @@ public class RenderTileManager {
         renderTiles(poseStack, worldScreenv2, renderTiles, worldScreenv2.opacities, RenderTile::afterTilesRender);
     }
 
-    private static void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, Map<String, Float> opacity, TileRenderStrategy tileRenderStrategy) {
+    private void renderTiles(PoseStack poseStack, WorldScreenv2 worldScreenv2, ArrayList<RenderTile> renderTiles, Map<String, Float> opacity, TileRenderStrategy tileRenderStrategy) {
+        Map<String, Collection<Pair<DynamicTexture, Vector3f>>> tracked = new LinkedHashMap<>();
         for (RenderTile tileToRender : renderTiles) {
 
             int localX = (int) worldScreenv2.getLocalXFromWorldX(tileToRender.getTileWorldX());
@@ -176,15 +182,115 @@ public class RenderTileManager {
             int screenTileMinX = (worldScreenv2.getScreenCenterX() + localX);
             int screenTileMinZ = (worldScreenv2.getScreenCenterZ() + localZ);
 
-            poseStack.pushPose();
-            poseStack.translate(screenTileMinX, screenTileMinZ, 0);
-            poseStack.mulPose(Vector3f.ZN.rotationDegrees(180));
 
-            tileRenderStrategy.renderTile(tileToRender, poseStack, screenTileMinX, screenTileMinZ, new ArrayList<>(), opacity);
+            tileToRender.getTileLayers().forEach((s, tileLayer) -> {
+                DynamicTexture image = tileLayer.getImage();
+                tracked.computeIfAbsent(s, key -> new ArrayList<>()).add(Pair.of(image, new Vector3f(screenTileMinX, screenTileMinZ, tileToRender.getSize())));
+            });
+
+        }
+
+        tracked.forEach((s, pairs) -> {
+            poseStack.pushPose();
+            RenderSystem.setShader(() -> this.batchedShader);
+            BufferBuilder bufferbuilder = Tesselator.getInstance().getBuilder();
+            bufferbuilder.begin(VertexFormat.Mode.QUADS, WVVertexFormats.POSITION_TEX_INDEX);
+            RenderSystem.setShaderColor(1, 1, 1, 1);
+
+            this.batchedShader.getUniform("u_textures").set(new float[]{0, 1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F});
+
+            int slot = 0;
+
+            int maxTextureSlots = 12;
+
+            for (Pair<DynamicTexture, Vector3f> pair : pairs) {
+                DynamicTexture dynamicTexture = pair.getFirst();
+
+                int size = (int) pair.getSecond().z();
+                if (dynamicTexture != null) {
+
+                    if (slot > maxTextureSlots) {
+                        RenderSystem.setShaderColor(1, 1, 1, 1);
+
+                        // End
+                        bufferbuilder.end();
+                        BufferUploader.end(bufferbuilder);
+
+                        // Start again
+                        RenderSystem.setShader(() -> this.batchedShader);
+                        bufferbuilder = Tesselator.getInstance().getBuilder();
+                        bufferbuilder.begin(VertexFormat.Mode.QUADS, WVVertexFormats.POSITION_TEX_INDEX);
+                        RenderSystem.setShaderColor(1, 1, 1, 1);
+                        slot = 0;
+                    }
+                    RenderSystem.setShaderTexture(slot, dynamicTexture.getId());
+
+
+                    Vector3f renderCoords = pair.getSecond().copy();
+//                    renderCoords.transform(Vector3f.ZN.rotationDegrees(180));
+
+                    blit(poseStack, (int) renderCoords.x(), (int) renderCoords.y(), 0.0F, 0.0F, size, size, size, size, slot);
+                    slot++;
+                }
+            }
+            RenderSystem.setShaderColor(1, 1, 1, 1);
+
+            bufferbuilder.end();
+            BufferUploader.end(bufferbuilder);
 
             poseStack.popPose();
-        }
+        });
+
+
     }
+
+    record Vec2f(float x, float z) {
+    }
+
+    public static void blit(PoseStack pPoseStack, int pX, int pY, int pBlitOffset, int pWidth, int pHeight, TextureAtlasSprite pSprite, int textureIDX) {
+        innerBlit(pPoseStack.last().pose(), pX, pX + pWidth, pY, pY + pHeight, pBlitOffset, pSprite.getU0(), pSprite.getU1(), pSprite.getV0(), pSprite.getV1(), textureIDX);
+    }
+
+    public void blit(PoseStack pPoseStack, int pX, int pY, int pUOffset, int pVOffset, int pUWidth, int pVHeight, int textureIDX) {
+        blit(pPoseStack, pX, pY, 0, (float) pUOffset, (float) pVOffset, pUWidth, pVHeight, 256, 256, textureIDX);
+    }
+
+    public static void blit(PoseStack pPoseStack, int pX, int pY, int pBlitOffset, float pUOffset, float pVOffset, int pUWidth, int pVHeight, int pTextureHeight, int pTextureWidth, int textureIDX) {
+        innerBlit(pPoseStack, pX, pX + pUWidth, pY, pY + pVHeight, pBlitOffset, pUWidth, pVHeight, pUOffset, pVOffset, pTextureHeight, pTextureWidth, textureIDX);
+    }
+
+    public static void blit(PoseStack pPoseStack, int pX, int pY, int pWidth, int pHeight, float pUOffset, float pVOffset, int pUWidth, int pVHeight, int pTextureWidth, int pTextureHeight, int textureIDX) {
+        innerBlit(pPoseStack, pX, pX + pWidth, pY, pY + pHeight, 0, pUWidth, pVHeight, pUOffset, pVOffset, pTextureWidth, pTextureHeight, textureIDX);
+    }
+
+    public static void blit(PoseStack pPoseStack, int pX, int pY, float pUOffset, float pVOffset, int pWidth, int pHeight, int pTextureWidth, int pTextureHeight, int textureIDX) {
+        blit(pPoseStack, pX, pY, pWidth, pHeight, pUOffset, pVOffset, pWidth, pHeight, pTextureWidth, pTextureHeight, textureIDX);
+    }
+
+    private static void innerBlit(PoseStack pPoseStack, int pX1, int pX2, int pY1, int pY2, int pBlitOffset, int pUWidth, int pVHeight, float pUOffset, float pVOffset, int pTextureWidth, int pTextureHeight, int textureIDX) {
+        innerBlit(pPoseStack.last().pose(), pX1, pX2, pY1, pY2, pBlitOffset, (pUOffset + 0.0F) / (float) pTextureWidth, (pUOffset + (float) pUWidth) / (float) pTextureWidth, (pVOffset + 0.0F) / (float) pTextureHeight, (pVOffset + (float) pVHeight) / (float) pTextureHeight, textureIDX);
+    }
+
+    private static void innerBlit(Matrix4f pMatrix, int pX1, int pX2, int pY1, int pY2, int pBlitOffset, float pMinU, float pMaxU, float pMinV, float pMaxV, int textureIDX) {
+        BufferBuilder bufferbuilder = Tesselator.getInstance().getBuilder();
+        VertexConsumer consumer1 = bufferbuilder.vertex(pMatrix, (float) pX1, (float) pY2, (float) pBlitOffset).uv(pMinU, pMaxV);
+        bufferbuilder.putFloat(0, textureIDX);
+        bufferbuilder.nextElement();
+        consumer1.endVertex();
+        VertexConsumer consumer2 = bufferbuilder.vertex(pMatrix, (float) pX2, (float) pY2, (float) pBlitOffset).uv(pMaxU, pMaxV);
+        bufferbuilder.putFloat(0, textureIDX);
+        bufferbuilder.nextElement();
+        consumer2.endVertex();
+        VertexConsumer consumer3 = bufferbuilder.vertex(pMatrix, (float) pX2, (float) pY1, (float) pBlitOffset).uv(pMaxU, pMinV);
+        bufferbuilder.putFloat(0, textureIDX);
+        bufferbuilder.nextElement();
+        consumer3.endVertex();
+        VertexConsumer consumer4 = bufferbuilder.vertex(pMatrix, (float) pX1, (float) pY1, (float) pBlitOffset).uv(pMinU, pMinV);
+        bufferbuilder.putFloat(0, textureIDX);
+        bufferbuilder.nextElement();
+        consumer4.endVertex();
+    }
+
 
     public void cull(WorldScreenv2 worldScreenv2) {
         LongSet toRemove = new LongOpenHashSet();

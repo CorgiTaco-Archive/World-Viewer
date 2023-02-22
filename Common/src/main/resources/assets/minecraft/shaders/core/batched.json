@@ -4,11 +4,12 @@
     "srcrgb": "srcalpha",
     "dstrgb": "1-srcalpha"
   },
-  "vertex": "position_tex",
-  "fragment": "layer_mixer",
+  "vertex": "batched",
+  "fragment": "batched",
   "attributes": [
     "Position",
-    "UV0"
+    "UV0",
+    "Tex_Index"
   ],
   "samplers": [
     { "name":  "Sampler0"},
@@ -17,7 +18,6 @@
   "uniforms": [
     { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
     { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
-    { "name": "Opacity", "type": "float", "count": 1, "values": [ 1.0 ] },
-    { "name": "BiomeColor", "type": "float", "count": 4,  "values": [ 1.0, 1.0, 1.0, 1.0 ] }
+    { "name": "u_textures", "type": "float", "count": 12, "values": [ 0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0 ] }
   ]
 }

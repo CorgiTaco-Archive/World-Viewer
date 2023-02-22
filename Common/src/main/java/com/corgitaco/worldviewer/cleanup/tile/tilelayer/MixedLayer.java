@@ -34,6 +34,7 @@ public class MixedLayer extends TileLayer {
             color = new Vector4f(0, 0, 0, 0);
         }
 
+
         shaderInstance.getUniform("BiomeColor").set(color);
 
         TileLayer heights = tileLayerMap.get("heights");

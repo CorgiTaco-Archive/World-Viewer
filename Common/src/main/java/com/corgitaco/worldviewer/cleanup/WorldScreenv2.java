@@ -236,14 +236,14 @@ public class WorldScreenv2 extends Screen {
 
         this.renderTileManager.render(stack, mouseX, mouseY, partialTicks, this);
 
-        drawGrid(stack);
+//        drawGrid(stack);
 
-        drawPlayers(stack);
+//        drawPlayers(stack);
 
         stack.popPose();
 
         if (!overWidget(mouseX, mouseY)) {
-            renderToolTip(stack, mouseX, mouseY);
+//            renderToolTip(stack, mouseX, mouseY);
         }
         super.render(stack, mouseX, mouseY, partialTicks);
     }
