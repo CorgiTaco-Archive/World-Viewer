@@ -8,3 +8,8 @@ version = "1.0-SNAPSHOT"
 minecraft {
     version("1.19.2")
 }
+
+dependencies {
+    implementation("org.joml:joml:1.10.5")
+    testImplementation("org.joml:joml:1.10.5")
+}

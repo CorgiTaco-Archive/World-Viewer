@@ -21,8 +21,13 @@ public final class WindowTest {
         GL.createCapabilities();
 
         // Ignoring view matrix.
+        var projection = new Matrix4f();
+        var model = new Matrix4f();
 
         while (!window.shouldClose()) {
+
+            projection.identity();
+            model.identity();
 
             window.update();
         }

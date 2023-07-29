@@ -1,5 +1,6 @@
 package dev.corgitaco.worldviewer;
 
+import dev.corgitaco.worldviewer.client.Destroyable;
 import org.lwjgl.system.MemoryStack;
 
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
@@ -7,7 +8,7 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.system.MemoryUtil.memAddress;
 
-public final class Window {
+public final class Window implements Destroyable {
     private final long window;
 
     {
@@ -44,6 +45,7 @@ public final class Window {
         glfwSwapBuffers(window);
     }
 
+    @Override
     public void destroy() {
         glfwFreeCallbacks(window);
         glfwDestroyWindow(window);
