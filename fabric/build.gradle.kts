@@ -1,19 +1,28 @@
+import net.fabricmc.loom.api.mappings.layered.spec.LayeredMappingSpecBuilder
+
 plugins {
-    id("java")
+    id("fabric-loom") version "1.2-SNAPSHOT"
 }
 
-group = "com.chaottic"
-version = "1.0-SNAPSHOT"
+loom {
+    runs {
+        getByName("client") {
+            client()
+        }
+        getByName("server") {
+            server()
+        }
 
-repositories {
-    mavenCentral()
+        all {
+            ideConfigGenerated(true)
+        }
+    }
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.9.1"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-}
+    minecraft("com.mojang:minecraft:1.19.2")
+    mappings(loom.layered(LayeredMappingSpecBuilder::officialMojangMappings))
 
-tasks.test {
-    useJUnitPlatform()
+    modImplementation("net.fabricmc:fabric-loader:0.14.21")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:0.76.0+1.19.2")
 }

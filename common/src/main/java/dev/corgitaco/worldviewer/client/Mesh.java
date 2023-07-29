@@ -3,11 +3,13 @@ package dev.corgitaco.worldviewer.client;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
+import java.util.List;
+
 import static org.lwjgl.opengl.GL45.*;
 import static org.lwjgl.system.MemoryUtil.memCalloc;
 import static org.lwjgl.system.MemoryUtil.memFree;
 
-public final class Mesh implements Destroyable {
+public final class Mesh<T extends Instantiable> implements Destroyable {
     private final int vao = glCreateVertexArrays();
     private final int vbo;
     private final int ebo;
@@ -61,20 +63,20 @@ public final class Mesh implements Destroyable {
         glVertexArrayElementBuffer(vao, ebo);
     }
 
-    public void draw(ProgramPipeline pipeline) {
-        // pipeline.bind();
+    public void draw(ProgramPipeline pipeline, List<T> collection) {
+        pipeline.bind();
 
         glBindVertexArray(vao);
 
         glEnableVertexArrayAttrib(vao, 0);
 
-        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, 1);
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, collection.size());
 
         glDisableVertexArrayAttrib(vao, 0);
 
         glBindVertexArray(0);
 
-        // ProgramPipeline.unbind();
+        ProgramPipeline.unbind();
     }
 
     // Multiply matrices before uploading to save overhead.
@@ -87,8 +89,10 @@ public final class Mesh implements Destroyable {
         glUnmapNamedBuffer(ubo);
     }
 
-    public void uploadInstance() {
+    public void uploadInstantiable(List<T> collection) {
+        for (var i = 0; i < collection.size(); i++) {
 
+        }
     }
 
     @Override

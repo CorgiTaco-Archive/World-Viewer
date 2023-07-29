@@ -1,5 +1,7 @@
 package dev.corgitaco.worldviewer.client;
 
+import java.io.IOException;
+
 import static org.lwjgl.opengl.GL45.*;
 
 public final class ProgramPipeline implements Destroyable {
@@ -7,9 +9,9 @@ public final class ProgramPipeline implements Destroyable {
     private final int fragment;
     private final int vertex;
 
-    public ProgramPipeline() {
-        fragment = glCreateShaderProgramv(GL_FRAGMENT_SHADER, "");
-        vertex = glCreateShaderProgramv(GL_VERTEX_SHADER, "");
+    public ProgramPipeline(String fragmentSource, String vertexSource) throws IOException {
+        fragment = glCreateShaderProgramv(GL_FRAGMENT_SHADER, fragmentSource);
+        vertex = glCreateShaderProgramv(GL_VERTEX_SHADER, vertexSource);
 
         glUseProgramStages(pipeline, GL_FRAGMENT_SHADER_BIT, fragment);
         glUseProgramStages(pipeline, GL_VERTEX_SHADER_BIT, vertex);
