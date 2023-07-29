@@ -11,6 +11,9 @@ import static org.lwjgl.system.MemoryUtil.memAddress;
 public final class Window implements Destroyable {
     private final long window;
 
+    private int width;
+    private int height;
+
     {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -29,11 +32,12 @@ public final class Window implements Destroyable {
             nglfwGetWindowSize(window, address + 16, address + 20);
 
             glfwSetWindowPos(window,
-                    (buffers.get(2) - buffers.get(4)) / 2,
-                    (buffers.get(3) - buffers.get(5)) / 2);
+                    (width = buffers.get(2) - buffers.get(4)) / 2,
+                    (height = buffers.get(3) - buffers.get(5)) / 2);
         }
 
         glfwMakeContextCurrent(window);
+        glfwSwapInterval(1);
     }
 
     public boolean shouldClose() {
@@ -49,5 +53,9 @@ public final class Window implements Destroyable {
     public void destroy() {
         glfwFreeCallbacks(window);
         glfwDestroyWindow(window);
+    }
+
+    public float getAspectRatio() {
+        return (float) width / (float) height;
     }
 }

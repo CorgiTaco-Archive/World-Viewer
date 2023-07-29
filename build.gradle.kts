@@ -1,9 +1,11 @@
 plugins {
     id("java")
+    id("io.freefair.lombok") version "8.1.0"
 }
 
 subprojects {
     apply(plugin = "java")
+    apply(plugin = "io.freefair.lombok")
 }
 
 allprojects {

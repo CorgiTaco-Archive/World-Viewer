@@ -32,6 +32,11 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
     }
 
     private void setup() {
+        glNamedBufferStorage(ubo, 16 * 4, GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
+
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+
         glVertexArrayVertexBuffer(vao, 0, vbo, 0, 16);
 
         var buffer = memCalloc((4 * 4 + 6) * 4);
@@ -63,14 +68,14 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         glVertexArrayElementBuffer(vao, ebo);
     }
 
-    public void draw(ProgramPipeline pipeline, List<T> collection) {
+    public void draw(ProgramPipeline pipeline, List<T> list) {
         pipeline.bind();
 
         glBindVertexArray(vao);
 
         glEnableVertexArrayAttrib(vao, 0);
 
-        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, collection.size());
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, list.size());
 
         glDisableVertexArrayAttrib(vao, 0);
 
@@ -89,10 +94,24 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         glUnmapNamedBuffer(ubo);
     }
 
-    public void uploadInstantiable(List<T> collection) {
-        for (var i = 0; i < collection.size(); i++) {
+    public void uploadInstances(List<T> list) {
+        var size = list.size();
+        var buffer = memCalloc((16 * 4) * size);
 
+        var matrix4f = new Matrix4f();
+
+        for (var i = 0; i < size; i++) {
+            var translation = list.get(i).getTranslation();
+
+            matrix4f.identity();
+            matrix4f.translate(translation.x, translation.y, 0.0F);
+
+            matrix4f.get((16 * 4) * i, buffer);
         }
+
+        glNamedBufferData(ssbo, buffer, GL_DYNAMIC_DRAW);
+
+        memFree(buffer);
     }
 
     @Override

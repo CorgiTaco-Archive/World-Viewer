@@ -15,7 +15,7 @@ import static org.lwjgl.glfw.GLFW.glfwTerminate;
 import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
 import static org.lwjgl.opengl.GL11.glClear;
 
-public final class WindowTest {
+public final class Tests {
 
     @Test
     public void test() throws IOException {
@@ -32,6 +32,8 @@ public final class WindowTest {
         var projection = new Matrix4f();
         var model = new Matrix4f();
 
+        var pvm = new Matrix4f();
+
         var mesh = new Mesh<InstantiableEntity>();
 
         // glClearColor(1.0F, 0.0F, 0.0F, 0.0F);
@@ -45,9 +47,16 @@ public final class WindowTest {
         while (!window.shouldClose()) {
             glClear(GL_COLOR_BUFFER_BIT);
 
+            var aspectRatio = window.getAspectRatio();
+            var fieldOfView = (float) Math.toRadians(70.0F);
+
             projection.identity();
+            projection.ortho(-fieldOfView * aspectRatio, fieldOfView * aspectRatio, -fieldOfView, fieldOfView, 1.0F, -1.0F);
+
             model.identity();
 
+            mesh.uploadMatrices(projection.mul(model, pvm));
+            mesh.uploadInstances(entities);
             mesh.draw(pipeline, entities);
 
             window.update();
