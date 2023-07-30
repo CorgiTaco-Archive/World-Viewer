@@ -38,15 +38,20 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-        glVertexArrayVertexBuffer(vao, 0, vbo, 0, 16);
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, 6 * 4);
 
-        var buffer = memCalloc((4 * 4 + 6) * 4);
+        glVertexArrayAttribBinding(vao, 0, 0);
+        glVertexArrayAttribBinding(vao, 1, 0);
+        glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, false, 0);
+        glVertexArrayAttribFormat(vao, 1, 2, GL_FLOAT, false, 4 * 4);
+
+        var buffer = memCalloc((6 * 4 + 6) * 4);
 
         putFloatArray(buffer, new float[] {
-                -0.5F, -0.5F, 0.0F, 1.0F,
-                 0.5F, -0.5F, 0.0F, 1.0F,
-                 0.5F,  0.5F, 0.0F, 1.0F,
-                -0.5F,  0.5F, 0.0F, 1.0F
+                -0.5F, -0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
+                 0.5F, -0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
+                 0.5F,  0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
+                -0.5F,  0.5F, 0.0F, 1.0F, 1.0F, 1.0F
         });
 
         putIntArray(buffer, new int[] {
@@ -56,7 +61,7 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
 
         buffer.flip();
 
-        var vertices = 4 * 4 * 4;
+        var vertices = 6 * 4 * 4;
         var elements = 6 * 4;
 
         var flags = 0;
@@ -80,10 +85,12 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         glBindVertexArray(vao);
 
         glEnableVertexArrayAttrib(vao, 0);
+        glEnableVertexArrayAttrib(vao, 1);
 
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, list.size());
 
         glDisableVertexArrayAttrib(vao, 0);
+        glDisableVertexArrayAttrib(vao, 1);
 
         glBindVertexArray(0);
 
