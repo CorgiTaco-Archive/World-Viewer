@@ -1,6 +1,7 @@
 package dev.corgitaco.worldviewer.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.corgitaco.worldviewer.mixin.NativeImageAccessor;
 
 import java.io.IOException;
 
@@ -29,9 +30,10 @@ public final class TextureArray {
         if (image.getHeight() != height && image.getWidth() != width) {
             // TODO:: Warn
         }
+        glTextureSubImage3D(texture, 0, 0, 0, z, image.getWidth(), image.getHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).pixels());
     }
 
     public void upload(long pixels, int z, int width, int height) {
-        glTextureSubImage3D(texture, 0, 0, 0, z, width, height, 1, GL_RGBA, 0, pixels);
+        glTextureSubImage3D(texture, 0, 0, 0, z, width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     }
 }

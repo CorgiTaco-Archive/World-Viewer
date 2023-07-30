@@ -33,8 +33,6 @@ public final class Tests {
         var projection = new Matrix4f();
         var model = new Matrix4f();
 
-        var pvm = new Matrix4f();
-
         var mesh = new Mesh<InstantiableEntity>();
 
         var textureArray = new TextureArray(512, 512, 1);
@@ -60,7 +58,7 @@ public final class Tests {
 
             model.identity();
 
-            mesh.uploadMatrices(projection.mul(model, pvm));
+            mesh.uploadMatrices(projection.mul(model, new Matrix4f()));
             mesh.uploadInstances(entities);
             mesh.draw(pipeline, entities);
 
