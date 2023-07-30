@@ -3,6 +3,7 @@ package dev.corgitaco.worldviewer.client;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 
 import static org.lwjgl.opengl.GL45.*;
@@ -41,16 +42,14 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
 
         var buffer = memCalloc((4 * 4 + 6) * 4);
 
-        var wrapped = new WrappedByteBuffer(buffer);
-
-        wrapped.putFloatArray(new float[] {
+        putFloatArray(buffer, new float[] {
                 -0.5F, -0.5F, 0.0F, 1.0F,
                  0.5F, -0.5F, 0.0F, 1.0F,
                  0.5F,  0.5F, 0.0F, 1.0F,
                 -0.5F,  0.5F, 0.0F, 1.0F
         });
 
-        wrapped.putIntArray(new int[] {
+        putIntArray(buffer, new int[] {
                 0, 1, 2,
                 2, 3, 0
         });
@@ -128,5 +127,17 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         glDeleteBuffers(ebo);
         glDeleteBuffers(ubo);
         glDeleteBuffers(ssbo);
+    }
+
+    private static void putFloatArray(ByteBuffer buffer, float[] floats) {
+        for (var aFloat : floats) {
+            buffer.putFloat(aFloat);
+        }
+    }
+
+    private static void putIntArray(ByteBuffer buffer, int[] ints) {
+        for (var aInt : ints) {
+            buffer.putInt(aInt);
+        }
     }
 }

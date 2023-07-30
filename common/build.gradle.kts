@@ -14,4 +14,10 @@ minecraft {
 dependencies {
     api("org.joml:joml:1.10.5")
     testImplementation("org.joml:joml:1.10.5")
+
+    testImplementation(kotlin("test"))
+}
+
+kotlin {
+    jvmToolchain(17)
 }

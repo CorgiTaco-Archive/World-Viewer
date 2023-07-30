@@ -42,7 +42,7 @@ public final class Tests {
                 Resources.readString("assets/worldviewer/shaders/map_fragment.glsl"),
                 Resources.readString("assets/worldviewer/shaders/map_vertex.glsl"));
 
-        var entities = List.of(new InstantiableEntity());
+        var entities = List.of(new InstantiableEntity(), new InstantiableEntity());
 
         while (!window.shouldClose()) {
             glClear(GL_COLOR_BUFFER_BIT);
