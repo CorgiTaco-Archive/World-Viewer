@@ -35,7 +35,7 @@ public final class TextureArray {
         if (image.getHeight() != height && image.getWidth() != width) {
             // TODO:: Warn
         }
-        glTextureSubImage3D(texture, 0, 0, 0, z, image.getWidth(), image.getHeight(), 1, GL_RGBA, GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).pixels());
+        glTextureSubImage3D(texture, 0, 0, 0, z, image.getWidth(), image.getHeight(), 1, image.format().glFormat(), GL_UNSIGNED_BYTE, ((NativeImageAccessor) (Object) image).pixels());
     }
 
     public void upload(String path, int z) throws IOException {
