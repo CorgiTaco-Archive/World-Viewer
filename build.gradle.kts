@@ -1,12 +1,10 @@
 plugins {
     id("java")
-    id("io.freefair.lombok") version "8.1.0"
     id("jvm-class-extensions") version "1.3"
 }
 
 subprojects {
     apply(plugin = "java")
-    apply(plugin = "io.freefair.lombok")
     apply(plugin = "jvm-class-extensions")
 
     this.takeUnless { project -> project == project(":common")  }?.apply {
