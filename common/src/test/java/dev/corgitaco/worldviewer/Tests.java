@@ -3,6 +3,7 @@ package dev.corgitaco.worldviewer;
 import dev.corgitaco.worldviewer.client.Mesh;
 import dev.corgitaco.worldviewer.client.ProgramPipeline;
 import dev.corgitaco.worldviewer.client.Resources;
+import dev.corgitaco.worldviewer.client.TextureArray;
 import org.joml.Matrix4f;
 import org.junit.jupiter.api.Test;
 import org.lwjgl.opengl.GL;
@@ -35,6 +36,10 @@ public final class Tests {
         var pvm = new Matrix4f();
 
         var mesh = new Mesh<InstantiableEntity>();
+
+        var textureArray = new TextureArray(512, 512, 1);
+
+        textureArray.bind(0);
 
         // glClearColor(1.0F, 0.0F, 0.0F, 0.0F);
 

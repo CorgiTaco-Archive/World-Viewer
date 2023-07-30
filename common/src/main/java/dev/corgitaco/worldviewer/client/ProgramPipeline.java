@@ -20,7 +20,7 @@ public final class ProgramPipeline implements Destroyable {
 
     public void bind() {
         if (!glIsProgramPipeline(pipeline)) {
-            // Warn.
+            // TODO:: Warn
         }
         glBindProgramPipeline(pipeline);
     }
