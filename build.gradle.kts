@@ -6,6 +6,13 @@ plugins {
 subprojects {
     apply(plugin = "java")
     apply(plugin = "io.freefair.lombok")
+
+    this.takeUnless { project -> project == project(":common")  }?.apply {
+
+        dependencies {
+            implementation(project(":common"))
+        }
+    }
 }
 
 allprojects {

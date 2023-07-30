@@ -1,5 +1,7 @@
 plugins {
     id("org.spongepowered.gradle.vanilla") version "0.2.1-SNAPSHOT"
+    `java-library`
+    kotlin("jvm") version "1.9.0"
 }
 
 group = "com.chaottic"
@@ -10,6 +12,6 @@ minecraft {
 }
 
 dependencies {
-    implementation("org.joml:joml:1.10.5")
+    api("org.joml:joml:1.10.5")
     testImplementation("org.joml:joml:1.10.5")
 }

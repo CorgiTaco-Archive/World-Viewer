@@ -41,12 +41,19 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
 
         var buffer = memCalloc((4 * 4 + 6) * 4);
 
-        buffer.putFloat(-0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F);
-        buffer.putFloat( 0.5F).putFloat(-0.5F).putFloat(0.0F).putFloat(1.0F);
-        buffer.putFloat( 0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F);
-        buffer.putFloat(-0.5F).putFloat( 0.5F).putFloat(0.0F).putFloat(1.0F);
+        var wrapped = new WrappedByteBuffer(buffer);
 
-        buffer.putInt(0).putInt(1).putInt(2).putInt(2).putInt(3).putInt(0);
+        wrapped.putFloatArray(new float[] {
+                -0.5F, -0.5F, 0.0F, 1.0F,
+                 0.5F, -0.5F, 0.0F, 1.0F,
+                 0.5F,  0.5F, 0.0F, 1.0F,
+                -0.5F,  0.5F, 0.0F, 1.0F
+        });
+
+        wrapped.putIntArray(new int[] {
+                0, 1, 2,
+                2, 3, 0
+        });
 
         buffer.flip();
 

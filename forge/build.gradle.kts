@@ -1,19 +1,12 @@
+import net.fabricmc.loom.api.mappings.layered.spec.LayeredMappingSpecBuilder
+
 plugins {
-    id("java")
-}
-
-group = "com.chaottic"
-version = "1.0-SNAPSHOT"
-
-repositories {
-    mavenCentral()
+    id("dev.architectury.loom") version "0.12.0-SNAPSHOT"
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.9.1"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-}
+    minecraft("com.mojang:minecraft:1.19.2")
+    mappings(loom.layered(LayeredMappingSpecBuilder::officialMojangMappings))
 
-tasks.test {
-    useJUnitPlatform()
+    forge("net.minecraftforge:forge:1.19.2-43.2.21")
 }
