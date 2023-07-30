@@ -35,7 +35,10 @@ public final class Tests {
 
         var mesh = new Mesh<InstantiableEntity>();
 
-        var textureArray = new TextureArray(512, 512, 1);
+        var textureArray = new TextureArray(64, 64, 3);
+        textureArray.upload("blue.png", 0);
+        textureArray.upload("green.png", 1);
+        textureArray.upload("red.png", 2);
 
         textureArray.bind(0);
 

@@ -48,10 +48,10 @@ public final class Mesh<T extends Instantiable> implements Destroyable {
         var buffer = memCalloc((6 * 4 + 6) * 4);
 
         putFloatArray(buffer, new float[] {
-                -0.5F, -0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
+                -0.5F, -0.5F, 0.0F, 1.0F, 0.0F, 1.0F,
                  0.5F, -0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
-                 0.5F,  0.5F, 0.0F, 1.0F, 1.0F, 1.0F,
-                -0.5F,  0.5F, 0.0F, 1.0F, 1.0F, 1.0F
+                 0.5F,  0.5F, 0.0F, 1.0F, 1.0F, 0.0F,
+                -0.5F,  0.5F, 0.0F, 1.0F, 0.0F, 0.0F
         });
 
         putIntArray(buffer, new int[] {
